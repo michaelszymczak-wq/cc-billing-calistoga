@@ -1,8 +1,8 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   runBilling, subscribeToBillingProgress, getBillingResults,
   getExcelDownloadUrl, BillingResults, RateRule,
-  saveBillingPrefs,
+  saveBillingPrefs, getFruitIntakeSaved, FruitIntakeRunResult,
 } from '../api/client';
 import ProgressBar from './ProgressBar';
 import TabView from './TabView';
@@ -47,12 +47,18 @@ interface BillingControlsProps {
   rateRules: RateRule[];
   billingState: BillingRunState;
   onBillingStateChange: (updater: BillingRunState | ((prev: BillingRunState) => BillingRunState)) => void;
+  onNavigate?: (page: string) => void;
 }
 
 export default function BillingControls({
-  hasSettings, rateRules, billingState, onBillingStateChange,
+  hasSettings, rateRules, billingState, onBillingStateChange, onNavigate,
 }: BillingControlsProps) {
   const { month, year, running, progress, logs, stepStatus, results, sessionId } = billingState;
+  const [fruitData, setFruitData] = useState<FruitIntakeRunResult | null>(null);
+
+  useEffect(() => {
+    getFruitIntakeSaved().then(setFruitData).catch(() => {});
+  }, []);
 
   const update = useCallback(
     (partial: Partial<BillingRunState>) =>
@@ -195,6 +201,36 @@ export default function BillingControls({
       {enabledRuleCount === 0 && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-md text-sm">
           No rate rules configured. Go to the Rate Table page to add rules, or all actions will be unmatched.
+        </div>
+      )}
+
+      {/* Fruit Intake info card */}
+      {fruitData && fruitData.records.length > 0 && (
+        <div className="bg-green-50 border border-green-200 p-3 rounded-md text-sm flex items-center justify-between">
+          <div>
+            <span className="font-medium text-green-800">Fruit Intake:</span>{' '}
+            <span className="text-green-700">
+              {fruitData.records.length} active contracts
+              {' | '}
+              {month} {year} installment total:{' '}
+              <strong>
+                ${fruitData.records
+                  .reduce((sum, r) => {
+                    const inst = r.installments.find((i) => i.month === `${month} ${year}`);
+                    return sum + (inst?.amount || 0);
+                  }, 0)
+                  .toFixed(2)}
+              </strong>
+            </span>
+          </div>
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('fruit-intake')}
+              className="text-green-700 hover:text-green-900 text-xs underline"
+            >
+              View Details
+            </button>
+          )}
         </div>
       )}
 

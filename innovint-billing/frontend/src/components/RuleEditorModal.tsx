@@ -5,12 +5,12 @@ const ACTION_TYPES = [
   'ANALYSIS', 'CUSTOM', 'STEAM', 'ADDITION',
   'PROCESSFRUITTOVOLUME', 'PROCESSFRUITTOWEIGHT',
   'BOTTLING', 'FILTRATION', 'RACKING', 'BLENDING', 'TOPPING', 'SAMPLING',
-  'STORAGE',
+  'STORAGE', 'FRUITINTAKE',
 ];
 
 const BILLING_UNITS = [
   'per hour', 'per barrel', 'per lot', 'per analysis', 'per case',
-  'per kg', 'per gallon', 'flat fee', 'per vessel', 'per additive unit',
+  'per kg', 'per gallon', 'flat fee', 'per vessel', 'per additive unit', 'per ton',
 ];
 
 const TEMPLATES: Array<{ name: string; rule: Partial<RateRule> }> = [
@@ -27,6 +27,10 @@ const TEMPLATES: Array<{ name: string; rule: Partial<RateRule> }> = [
   { name: 'Storage - Tank (per gallon)', rule: { actionType: 'STORAGE', variation: 'TANK', billingUnit: 'per gallon' } },
   { name: 'Storage - Barrel (per barrel)', rule: { actionType: 'STORAGE', variation: 'BARREL', billingUnit: 'per barrel' } },
   { name: 'Storage - Keg (per keg)', rule: { actionType: 'STORAGE', variation: 'KEG', billingUnit: 'per vessel' } },
+  { name: 'Fruit Intake - Red (22mo)', rule: { actionType: 'FRUITINTAKE', variation: 'RED', billingUnit: 'per ton' } },
+  { name: 'Fruit Intake - White (9mo)', rule: { actionType: 'FRUITINTAKE', variation: 'WHITE', billingUnit: 'per ton' } },
+  { name: 'Fruit Intake - Chardonnay (12mo)', rule: { actionType: 'FRUITINTAKE', variation: 'WHITE|CHARDONNAY', billingUnit: 'per ton' } },
+  { name: 'Fruit Intake - Ros\u00e9 (9mo)', rule: { actionType: 'FRUITINTAKE', variation: 'ROS\u00c9', billingUnit: 'per ton' } },
 ];
 
 function defaultRule(): RateRule {
@@ -54,6 +58,7 @@ function variationHint(actionType: string): string {
     case 'PROCESSFRUITTOVOLUME':
     case 'PROCESSFRUITTOWEIGHT': return 'Leave blank \u2014 use Min/Max Qty for range';
     case 'STORAGE': return 'Vessel type: TANK (per gallon), BARREL (per barrel), or KEG (per keg)';
+    case 'FRUITINTAKE': return 'Color or COLOR|VARIETAL (e.g. "RED", "WHITE|CHARDONNAY")';
     default: return 'Subtype or variation to match';
   }
 }

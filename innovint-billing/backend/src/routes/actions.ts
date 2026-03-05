@@ -13,14 +13,14 @@ const router = Router();
 // In-memory session store
 const sessions = new Map<string, SessionData>();
 
-// SSE clients for progress streaming
-const sseClients = new Map<string, Response>();
+// SSE clients for progress streaming (exported for reuse by fruit intake routes)
+export const sseClients = new Map<string, Response>();
 
-function generateSessionId(): string {
+export function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-function emitProgress(sessionId: string, event: ProgressEvent): void {
+export function emitProgress(sessionId: string, event: ProgressEvent): void {
   const client = sseClients.get(sessionId);
   if (client) {
     client.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -91,11 +91,17 @@ router.get('/export-excel', async (req: Request, res: Response) => {
   }
 
   try {
+    const currentSettings = loadSettings();
+    const fruitIntakeRecords = currentSettings.fruitIntake?.records || [];
+    const billingMonth = req.query.billingMonth as string | undefined;
+
     const buffer = await generateExcel(
       session.billingResult.actions,
       session.billingResult.bulkInventory,
       session.billingResult.auditRows,
-      session.billingResult.barrelInventory
+      session.billingResult.barrelInventory,
+      fruitIntakeRecords,
+      billingMonth
     );
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

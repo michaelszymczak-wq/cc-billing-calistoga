@@ -9,7 +9,20 @@
       "Bash(npm run dev:*)",
       "Bash(curl:*)",
       "Bash(python3:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git remote:*)",
+      "Bash(gh repo create:*)",
+      "Bash(brew list:*)",
+      "Bash(brew install:*)",
+      "Bash(unzip:*)",
+      "Bash(/tmp/gh/gh_2.67.0_macOS_arm64/bin/gh auth status:*)",
+      "Bash(/tmp/gh/gh_2.67.0_macOS_arm64/bin/gh repo create:*)",
+      "Bash(git config:*)",
+      "Bash(open https://github.com/michaelszymczak-wq/cc-billing)"
     ]
   }
 }

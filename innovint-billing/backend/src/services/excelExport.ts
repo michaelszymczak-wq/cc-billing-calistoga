@@ -1,11 +1,13 @@
 import ExcelJS from 'exceljs';
-import { ActionRow, AuditRow, BarrelBillingRow, BulkBillingRow } from '../types';
+import { ActionRow, AuditRow, BarrelBillingRow, BulkBillingRow, FruitIntakeRecord } from '../types';
 
 export async function generateExcel(
   actions: ActionRow[],
   bulkInventory: BulkBillingRow[],
   auditRows: AuditRow[],
-  barrelInventory: BarrelBillingRow[] = []
+  barrelInventory: BarrelBillingRow[] = [],
+  fruitIntakeRecords: FruitIntakeRecord[] = [],
+  billingMonth?: string
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'InnoVint Billing Engine';
@@ -173,6 +175,146 @@ export async function generateExcel(
   ['rate', 'charge'].forEach((key) => {
     barrelSheet.getColumn(key).numFmt = '$#,##0.00';
   });
+
+  // ─── Fruit Intake Tab ───
+  if (fruitIntakeRecords.length > 0) {
+    const fruitSheet = workbook.addWorksheet('Fruit Intake');
+    fruitSheet.columns = [
+      { header: 'Event ID', key: 'eventId', width: 12 },
+      { header: 'Vintage', key: 'vintage', width: 10 },
+      { header: 'Date', key: 'effectiveDate', width: 18 },
+      { header: 'Weigh Tag', key: 'weighTagNumber', width: 14 },
+      { header: 'Owner', key: 'ownerName', width: 20 },
+      { header: 'Code', key: 'ownerCode', width: 10 },
+      { header: 'Lot Code', key: 'lotCode', width: 22 },
+      { header: 'Varietal', key: 'varietal', width: 16 },
+      { header: 'Color', key: 'color', width: 10 },
+      { header: 'Weight (tons)', key: 'fruitWeightTons', width: 14 },
+      { header: 'Contract (mo)', key: 'contractLengthMonths', width: 14 },
+      { header: 'Rate/ton', key: 'contractRatePerTon', width: 12 },
+      { header: 'Total Cost', key: 'totalCost', width: 14 },
+      { header: 'Monthly Amt', key: 'monthlyAmount', width: 14 },
+      { header: 'Start', key: 'contractStartMonth', width: 16 },
+      { header: 'End', key: 'contractEndMonth', width: 16 },
+    ];
+
+    fruitSheet.getRow(1).eachCell((cell) => {
+      cell.style = headerStyle as ExcelJS.Style;
+    });
+
+    for (const record of fruitIntakeRecords) {
+      fruitSheet.addRow({
+        eventId: record.eventId,
+        vintage: record.vintage,
+        effectiveDate: record.effectiveDate,
+        weighTagNumber: record.weighTagNumber,
+        ownerName: record.ownerName,
+        ownerCode: record.ownerCode,
+        lotCode: record.lotCode,
+        varietal: record.varietal,
+        color: record.color,
+        fruitWeightTons: record.fruitWeightTons,
+        contractLengthMonths: record.contractLengthMonths,
+        contractRatePerTon: record.contractRatePerTon,
+        totalCost: record.totalCost,
+        monthlyAmount: record.monthlyAmount,
+        contractStartMonth: record.contractStartMonth,
+        contractEndMonth: record.contractEndMonth,
+      });
+    }
+
+    ['contractRatePerTon', 'totalCost', 'monthlyAmount'].forEach((key) => {
+      fruitSheet.getColumn(key).numFmt = '$#,##0.00';
+    });
+
+    // ─── Installment Schedule Tab ───
+    // Gather all unique months across all records' installments
+    const allMonths = new Set<string>();
+    for (const record of fruitIntakeRecords) {
+      for (const inst of record.installments) {
+        allMonths.add(inst.month);
+      }
+    }
+
+    // Sort months chronologically
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const sortedMonths = Array.from(allMonths).sort((a, b) => {
+      const [mA, yA] = a.split(' ');
+      const [mB, yB] = b.split(' ');
+      const yearDiff = parseInt(yA) - parseInt(yB);
+      if (yearDiff !== 0) return yearDiff;
+      return MONTH_NAMES.indexOf(mA) - MONTH_NAMES.indexOf(mB);
+    });
+
+    if (sortedMonths.length > 0) {
+      const schedSheet = workbook.addWorksheet('Installment Schedule');
+
+      // Columns: Owner Code, Lot Code, then one per month, then Total
+      const cols: Partial<ExcelJS.Column>[] = [
+        { header: 'Owner Code', key: 'ownerCode', width: 12 },
+        { header: 'Lot Code', key: 'lotCode', width: 22 },
+      ];
+      for (const m of sortedMonths) {
+        cols.push({ header: m, key: m, width: 14 });
+      }
+      cols.push({ header: 'Total', key: 'total', width: 14 });
+      schedSheet.columns = cols;
+
+      schedSheet.getRow(1).eachCell((cell) => {
+        cell.style = headerStyle as ExcelJS.Style;
+      });
+
+      const subtotals: Record<string, number> = {};
+      for (const m of sortedMonths) subtotals[m] = 0;
+      let grandTotal = 0;
+
+      for (const record of fruitIntakeRecords) {
+        const row: Record<string, string | number> = {
+          ownerCode: record.ownerCode,
+          lotCode: record.lotCode,
+        };
+        let rowTotal = 0;
+        for (const inst of record.installments) {
+          row[inst.month] = inst.amount;
+          subtotals[inst.month] = (subtotals[inst.month] || 0) + inst.amount;
+          rowTotal += inst.amount;
+        }
+        row['total'] = rowTotal;
+        grandTotal += rowTotal;
+        schedSheet.addRow(row);
+      }
+
+      // Subtotal row
+      const subRow: Record<string, string | number> = { ownerCode: '', lotCode: 'SUBTOTAL' };
+      for (const m of sortedMonths) subRow[m] = subtotals[m];
+      subRow['total'] = grandTotal;
+      const subtotalExcelRow = schedSheet.addRow(subRow);
+      subtotalExcelRow.font = { bold: true };
+
+      // Format currency
+      for (const m of sortedMonths) {
+        schedSheet.getColumn(m).numFmt = '$#,##0.00';
+      }
+      schedSheet.getColumn('total').numFmt = '$#,##0.00';
+
+      // Highlight billing month column if provided
+      if (billingMonth && sortedMonths.includes(billingMonth)) {
+        const colIdx = sortedMonths.indexOf(billingMonth) + 3; // +1 for 1-indexed, +2 for ownerCode & lotCode
+        schedSheet.getColumn(colIdx).eachCell((cell, rowNumber) => {
+          if (rowNumber > 1) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE2EFDA' },
+            };
+          }
+        });
+      }
+    }
+  }
 
   // Write to buffer
   const buffer = await workbook.xlsx.writeBuffer();
