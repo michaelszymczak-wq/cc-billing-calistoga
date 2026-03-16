@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { BillingRequest, BillingResponse, ProgressEvent, RateRule, SessionData } from '../types';
+import { ActionRow, AuditRow, BillingRequest, BillingResponse, ProgressEvent, RateRule, SessionData } from '../types';
 import { fetchAllActions, fetchInventorySnapshot, getMonthDateRange } from '../services/innovintApi';
 import { processActions, enrichCustomActionVolumes } from '../services/actionProcessor';
 import { applyRateMapping } from '../services/rateMapper';
@@ -110,6 +110,55 @@ router.get('/billing-results', async (req: Request, res: Response) => {
     return;
   }
   res.json(session.billingResult);
+});
+
+// Rectify an audit row — persist to session so exports reflect changes
+router.post('/rectify', async (req: Request, res: Response) => {
+  const { sessionId, auditIndex, actionRow } = req.body as {
+    sessionId: string;
+    auditIndex: number;
+    actionRow: ActionRow;
+  };
+
+  let session = sessions.get(sessionId);
+  if (!session?.billingResult) {
+    const stored = await loadSessionResult(sessionId);
+    if (stored?.billingResult) {
+      sessions.set(sessionId, stored);
+      session = stored;
+    }
+  }
+  if (!session?.billingResult) {
+    res.status(404).json({ error: 'No results found for this session.' });
+    return;
+  }
+
+  const br = session.billingResult;
+
+  // Replace the original unmatched row in actions (same actionId), or append
+  const existingIdx = br.actions.findIndex(
+    (r) => r.actionId === actionRow.actionId && !r.matched
+  );
+  if (existingIdx >= 0) {
+    br.actions[existingIdx] = actionRow;
+  } else {
+    br.actions.push(actionRow);
+  }
+
+  // Remove from audit rows
+  br.auditRows = br.auditRows.filter((_, i) => i !== auditIndex);
+
+  // Update summary
+  br.summary.totalBilled = br.actions
+    .filter((r) => r.matched)
+    .reduce((sum, r) => sum + r.total, 0);
+  br.summary.totalActions = br.actions.length;
+  br.summary.auditCount = br.auditRows.length;
+
+  // Persist to Firestore if enabled
+  saveSessionResult(sessionId, session).catch(() => {});
+
+  res.json({ success: true });
 });
 
 // Excel export

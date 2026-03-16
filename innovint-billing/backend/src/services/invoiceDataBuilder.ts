@@ -103,7 +103,7 @@ export function buildInvoicePreview(
     const ownerActions = actions.filter(a => a.ownerCode === ownerCode && a.matched);
     const grouped = new Map<string, { qty: number; total: number }>();
     for (const row of ownerActions) {
-      const label = row.matchedRuleLabel || row.actionType;
+      const label = (row.matchedRuleLabel || row.actionType).replace(' (rectified)', '');
       const existing = grouped.get(label);
       const qty = (row.quantity && row.quantity > 0) ? row.quantity : (row.hours && row.hours > 0 ? row.hours : 1);
       if (existing) {

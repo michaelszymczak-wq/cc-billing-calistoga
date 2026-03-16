@@ -399,6 +399,19 @@ export async function downloadExcel(sessionId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export async function rectifyAction(
+  sessionId: string,
+  auditIndex: number,
+  actionRow: ActionRow
+): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/rectify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, auditIndex, actionRow }),
+  });
+  if (!res.ok) throw new Error('Failed to persist rectification');
+}
+
 export async function saveBarrelSnapshots(snapshots: BarrelSnapshots): Promise<{ success: boolean }> {
   const res = await apiFetch(`${BASE_URL}/settings/barrel-snapshots`, {
     method: 'PUT',

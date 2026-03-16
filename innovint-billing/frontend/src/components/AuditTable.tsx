@@ -11,6 +11,7 @@ interface AuditTableProps {
 interface RowEdit {
   ownerCode: string;
   ruleId: string;
+  quantityOverride: string;
   totalOverride: string;
 }
 
@@ -23,7 +24,7 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
   );
 
   function getEdit(idx: number, row: AuditRow): RowEdit {
-    return edits[idx] || { ownerCode: row.ownerCode, ruleId: '', totalOverride: '' };
+    return edits[idx] || { ownerCode: row.ownerCode, ruleId: '', quantityOverride: '1', totalOverride: '' };
   }
 
   function updateEdit(idx: number, row: AuditRow, partial: Partial<RowEdit>) {
@@ -31,8 +32,7 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
     setEdits((prev) => ({ ...prev, [idx]: { ...current, ...partial } }));
   }
 
-  function computeTotal(rule: RateRule): number {
-    const qty = 1;
+  function computeTotal(rule: RateRule, qty: number): number {
     return Math.round((qty * rule.rate + rule.setupFee) * 100) / 100;
   }
 
@@ -41,7 +41,8 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
     const rule = enabledRules.find((r) => r.id === edit.ruleId);
     if (!rule) return;
 
-    const calculated = computeTotal(rule);
+    const qty = parseFloat(edit.quantityOverride) || 1;
+    const calculated = computeTotal(rule, qty);
     const total = edit.totalOverride !== '' ? parseFloat(edit.totalOverride) || 0 : calculated;
 
     const actionRow: ActionRow = {
@@ -57,8 +58,8 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
       setupFee: rule.setupFee,
       total,
       matched: true,
-      matchedRuleLabel: `${rule.label} (rectified)`,
-      quantity: 1,
+      matchedRuleLabel: rule.label,
+      quantity: qty,
     };
 
     onRectify(idx, actionRow);
@@ -84,6 +85,7 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
             <th className="px-3 py-2 text-left font-medium text-gray-600">Analysis/Notes</th>
             <th className="px-3 py-2 text-left font-medium text-gray-600">Reason</th>
             <th className="px-3 py-2 text-left font-medium text-gray-600">Assign Rule</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">Qty</th>
             <th className="px-3 py-2 text-right font-medium text-gray-600">Total</th>
             <th className="px-3 py-2 text-center font-medium text-gray-600"></th>
           </tr>
@@ -92,7 +94,8 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
           {rows.map((row, i) => {
             const edit = getEdit(i, row);
             const selectedRule = enabledRules.find((r) => r.id === edit.ruleId);
-            const calculated = selectedRule ? computeTotal(selectedRule) : 0;
+            const qty = parseFloat(edit.quantityOverride) || 1;
+            const calculated = selectedRule ? computeTotal(selectedRule, qty) : 0;
             const displayTotal = edit.totalOverride !== '' ? edit.totalOverride : (selectedRule ? calculated.toFixed(2) : '');
 
             return (
@@ -142,6 +145,18 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
                 <td className="px-3 py-1.5 text-right">
                   {selectedRule && (
                     <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={edit.quantityOverride}
+                      onChange={(e) => updateEdit(i, row, { quantityOverride: e.target.value, totalOverride: '' })}
+                      className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs text-right font-mono"
+                    />
+                  )}
+                </td>
+                <td className="px-3 py-1.5 text-right">
+                  {selectedRule && (
+                    <input
                       type="text"
                       value={displayTotal}
                       onChange={(e) => updateEdit(i, row, { totalOverride: e.target.value })}
@@ -164,7 +179,7 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={11} className="px-3 py-8 text-center text-gray-400">
+              <td colSpan={12} className="px-3 py-8 text-center text-gray-400">
                 No unmatched actions.
               </td>
             </tr>

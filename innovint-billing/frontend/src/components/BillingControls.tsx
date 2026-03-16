@@ -3,6 +3,7 @@ import {
   runBilling, pollBillingProgress, getBillingResults,
   downloadExcel, BillingResults, RateRule, ActionRow,
   saveBillingPrefs, getFruitIntakeSaved, FruitIntakeRunResult,
+  rectifyAction,
 } from '../api/client';
 import ProgressBar from './ProgressBar';
 import TabView from './TabView';
@@ -164,6 +165,11 @@ export default function BillingControls({
   }, [results]);
 
   const handleRectify = useCallback((auditIndex: number, actionRow: ActionRow) => {
+    // Persist to backend so exports reflect the change
+    if (sessionId) {
+      rectifyAction(sessionId, auditIndex, actionRow).catch(() => {});
+    }
+
     onBillingStateChange((prev) => {
       if (!prev.results) return prev;
       const newAudit = prev.results.auditRows.filter((_, i) => i !== auditIndex);
@@ -193,7 +199,7 @@ export default function BillingControls({
         },
       };
     });
-  }, [onBillingStateChange]);
+  }, [onBillingStateChange, sessionId]);
 
   const enabledRuleCount = rateRules.filter((r) => r.enabled).length;
 

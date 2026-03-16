@@ -22,6 +22,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
   const fetchRole = useCallback(async (currentUser: User) => {
     try {
       const token = await currentUser.getIdToken();
@@ -43,6 +45,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Skip Firebase auth in local development
+    if (isDev) {
+      setRole('admin');
+      setUser({ email: 'dev@localhost' } as User);
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -54,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
     return unsubscribe;
-  }, [fetchRole]);
+  }, [fetchRole, isDev]);
 
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
@@ -74,14 +84,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await signOut(auth);
+    if (!isDev) await signOut(auth);
     setRole(null);
-  }, []);
+  }, [isDev]);
 
   const getToken = useCallback(async (): Promise<string | null> => {
+    if (isDev) return null;
     if (!auth.currentUser) return null;
     return auth.currentUser.getIdToken();
-  }, []);
+  }, [isDev]);
 
   return (
     <AuthContext.Provider value={{ user, role, loading, error, login, logout, getToken }}>

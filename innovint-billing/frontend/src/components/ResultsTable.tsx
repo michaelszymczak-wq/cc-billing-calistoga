@@ -106,7 +106,7 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
           </thead>
           <tbody>
             {sorted.map((row, i) => (
-              <tr key={`${row.actionId}-${i}`} className={`border-t ${rowBgColor(row)} hover:brightness-95 ${row.matchedRuleLabel.includes('(rectified)') ? 'italic' : ''}`}>
+              <tr key={`${row.actionId}-${i}`} className={`border-t ${rowBgColor(row)} hover:brightness-95`}>
                 <td className="px-3 py-1.5 whitespace-nowrap">{row.actionType}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">
                   <a
