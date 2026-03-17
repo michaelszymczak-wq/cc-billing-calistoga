@@ -760,48 +760,6 @@ function processBottlingEnTirageAction(action: ActionApiItem): ActionRow[] {
 }
 
 /**
- * Process a REMOVED_TAXPAID action (VOLUME_CHANGE with complianceContext=REMOVED_TAXPAID).
- * Billing is per case, extracted from bottleFormat.
- */
-function processRemovedTaxpaidAction(action: ActionApiItem): ActionRow[] {
-  const date = convertDateToPST(action.effectiveAt);
-  const lotCodes = extractAllLotCodes(action);
-  const ownerCode = extractOwnerCode(action);
-
-  // Extract case count from bottleFormat (singular)
-  const bf = action.actionData?.bottleFormat;
-  let totalCases = 0;
-  if (bf) {
-    const bpc = bf.bottlesPerCase || 0;
-    const totalBottles = ((bf.cases || 0) * bpc)
-      + ((bf.pallets || 0) * (bf.casesPerPallet || 0) * bpc)
-      + (bf.bottles || 0);
-    totalCases = bpc > 0
-      ? Math.round((totalBottles / bpc) * 100) / 100
-      : 0;
-  }
-
-  return [{
-    actionType: 'VOLUME_CHANGE',
-    actionId: String(action._id),
-    lotCodes,
-    performer: action.performedBy?.name || '',
-    date,
-    ownerCode,
-    analysisOrNotes: 'REMOVED_TAXPAID',
-    hours: 0,
-    rate: 0,
-    setupFee: 0,
-    total: 0,
-    matched: false,
-    matchedRuleLabel: '',
-    rawActionType: 'VOLUME_CHANGE',
-    quantity: totalCases,
-    unit: 'cases',
-  }];
-}
-
-/**
  * Main processor: route each action to its handler.
  */
 export function processActions(actions: ActionApiItem[]): ActionRow[] {
@@ -822,8 +780,6 @@ export function processActions(actions: ActionApiItem[]): ActionRow[] {
       allRows.push(...processBottleAction(action));
     } else if (action.actionType === 'BOTTLING_EN_TIRAGE') {
       allRows.push(...processBottlingEnTirageAction(action));
-    } else if (action.actionType === 'VOLUME_CHANGE' && action.actionData?.complianceContext === 'REMOVED_TAXPAID') {
-      allRows.push(...processRemovedTaxpaidAction(action));
     } else {
       allRows.push(...processGenericAction(action));
     }
