@@ -5,7 +5,7 @@ const ACTION_TYPES = [
   'ANALYSIS', 'BOTTLE', 'CUSTOM', 'STEAM', 'ADDITION', 'FILTER',
   'BOND_TO_BOND_TRANSFER_IN', 'BOND_TO_BOND_TRANSFER_OUT',
   'PROCESSFRUITTOVOLUME', 'PROCESSFRUITTOWEIGHT',
-  'BOTTLING', 'FILTRATION', 'RACKING', 'BLENDING', 'TOPPING', 'SAMPLING',
+  'BOTTLING', 'FILTRATION', 'RACK', 'RACK_AND_RETURN', 'RACKING', 'BLENDING', 'TOPPING', 'SAMPLING',
   'STORAGE', 'FRUITINTAKE',
 ];
 
@@ -85,6 +85,8 @@ function variationHint(actionType: string): string {
     case 'BOTTLE': return 'Bottle format name (e.g. "Standard", "Magnum")';
     case 'PROCESSFRUITTOVOLUME':
     case 'PROCESSFRUITTOWEIGHT': return 'Leave blank \u2014 use Min/Max Qty for range';
+    case 'RACK':
+    case 'RACK_AND_RETURN': return 'Leave blank — billed per hour from Billable notes';
     case 'STORAGE': return 'Vessel type: TANK (per gallon), BARREL (per barrel), or KEG (per keg)';
     case 'FRUITINTAKE': return 'Color or COLOR|VARIETAL (e.g. "RED", "WHITE|CHARDONNAY")';
     default: return 'Subtype or variation to match';
@@ -319,6 +321,22 @@ export default function RuleEditorModal({ rule, onSave, onSaveAndAdd, onClose }:
               </div>
             </div>
 
+            {/* Extra Day Rate (BOTTLE only) */}
+            {form.actionType === 'BOTTLE' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Extra Day Rate ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.bottleExtraDayRate || 0}
+                  onChange={(e) => update('bottleExtraDayRate', parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+                <p className="text-xs text-gray-400 mt-1">Charge per additional day beyond 2 consecutive days in a bottling run. Base rate covers up to 2 days.</p>
+              </div>
+            )}
+
             {/* Bottles Per Case (BOTTLE only) */}
             {form.actionType === 'BOTTLE' && (
               <div>
@@ -484,6 +502,7 @@ export default function RuleEditorModal({ rule, onSave, onSaveAndAdd, onClose }:
             {form.freeFirstPerLot && (
               <p className="text-xs text-gray-400 ml-6 -mt-3">The earliest action on each lot is $0; billing starts from the 2nd occurrence</p>
             )}
+
 
             {/* Notes */}
             <div>

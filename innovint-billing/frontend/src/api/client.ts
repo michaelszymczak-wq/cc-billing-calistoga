@@ -44,6 +44,7 @@ export interface RateRule {
   excludeAllInclusive?: boolean;
   vesselType?: string;
   analysisSource?: string;
+  bottleExtraDayRate?: number;
 }
 
 export interface BarrelBillingRow {
@@ -62,10 +63,11 @@ export interface BarrelSnapshots {
   snap3Day: number | 'last';
 }
 
-export interface FruitProgram {
+export interface FruitColorRateTier {
   id: string;
-  name: string;
-  description: string;
+  color: string;
+  minTons: number;
+  maxTons: number;
   ratePerTon: number;
 }
 
@@ -73,11 +75,23 @@ export interface FruitIntakeSettings {
   actionTypeKey: string;
   vintageLookback: number;
   apiPageDelaySeconds: number;
-  programs: FruitProgram[];
+  colorRateTiers: FruitColorRateTier[];
+  tierByColor: boolean;
   minProcessingFee: number;
   defaultContractMonths: number;
   smallLotFee: number;
   smallLotThresholdTons: number;
+}
+
+export interface FruitCustomerOverride {
+  ownerCode: string;
+  deposit: number;
+  contractLengthMonths?: number;
+  colorOverrides?: {
+    color: string;
+    tonsOverride?: number;
+    costOverride?: number;
+  }[];
 }
 
 export interface FruitInstallment {
@@ -107,8 +121,7 @@ export interface FruitIntakeRecord {
   smallLotFee: number;
   installments: FruitInstallment[];
   savedAt: string;
-  programId?: string;
-  programName?: string;
+  colorRateTierId?: string;
 }
 
 export interface FruitIntakeRunResult {
@@ -119,6 +132,7 @@ export interface FruitIntakeRunResult {
   newRecords: number;
   duplicatesSkipped: number;
   records: FruitIntakeRecord[];
+  customerOverrides?: FruitCustomerOverride[];
 }
 
 export interface BillableAddOn {
@@ -134,6 +148,16 @@ export interface BillableAddOn {
   notes: string;
 }
 
+// ─── Consumables ───
+
+export interface Consumable {
+  id: string;
+  name: string;
+  vintage: number;
+  totalCost: number;
+  notes: string;
+}
+
 // ─── Customer Record ───
 
 export interface CustomerRecord {
@@ -143,48 +167,45 @@ export interface CustomerRecord {
   address: string;
   phone: string;
   email: string;
+  isActive: boolean;
 }
 
-// ─── Invoice Types ───
+// ─── QuickBooks Export Types ───
 
-export interface InvoiceLineItem {
+export interface QBLineItem {
+  arAccount: string;
+  customerJob: string;
+  date: string;
+  salesTax: string;
+  number: string;
+  class: string;
+  item: string;
   description: string;
   quantity: number;
-  price: number;
+  rate: number;
   amount: number;
+  taxCode: string;
 }
 
-export interface CustomerInvoice {
-  invoiceType: 'winery-services' | 'fruit-intake';
-  invoiceNumber: string;
-  issueDate: string;
-  title: string;
-  subtitle?: string;
-  customerName: string;
+export interface QBCustomerSummary {
   ownerCode: string;
-  customerAddress?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  lineItems: InvoiceLineItem[];
-  subtotal: number;
-  merchantFee: number;
-  totalDue: number;
+  sources: {
+    actions: { items: QBLineItem[]; subtotal: number };
+    barrel: { items: QBLineItem[]; subtotal: number };
+    bulk: { items: QBLineItem[]; subtotal: number };
+    fruitIntake: { items: QBLineItem[]; subtotal: number };
+    addOns: { items: QBLineItem[]; subtotal: number };
+    consumables: { items: QBLineItem[]; subtotal: number };
+    caseGoods: { items: QBLineItem[]; subtotal: number };
+  };
+  total: number;
 }
 
-export interface InvoiceCustomerSummary {
-  ownerCode: string;
-  customerName: string;
-  wineryServices: CustomerInvoice | null;
-  fruitIntake: CustomerInvoice | null;
-  combinedTotal: number;
-}
-
-export interface InvoicePreviewResponse {
-  customers: InvoiceCustomerSummary[];
+export interface QBPreviewResponse {
+  customers: QBCustomerSummary[];
   grandTotal: number;
-  invoiceCount: number;
-  billingMonth: string;
-  billingYear: number;
+  lineItemCount: number;
+  billingDate: string;
 }
 
 export interface AppConfig {
@@ -196,9 +217,14 @@ export interface AppConfig {
   lastUsedYear: number;
   barrelSnapshots: BarrelSnapshots;
   bulkStorageRate: number;
+  barrelStorageRate: number;
+  puncheonStorageRate: number;
+  tankStorageRate: number;
+  caseGoodsStorageRate: number;
   customers: CustomerRecord[];
   fruitIntakeSettings: FruitIntakeSettings;
   billableAddOns: BillableAddOn[];
+  activeCustomerStorageMonths: number[];
 }
 
 export interface ActionRow {
@@ -232,11 +258,24 @@ export interface AuditRow {
 }
 
 export interface BulkBillingRow {
+  type: 'bulk' | 'barrel' | 'puncheon' | 'tank';
   ownerCode: string;
-  snap1Volume: number;
+  snap1Volume: number;  // gallons for bulk, vessel count for barrel/puncheon
   snap2Volume: number;
   snap3Volume: number;
   billingVolume: number;
+  proration: number;
+  rate: number;
+  totalCost: number;
+}
+
+export interface CaseGoodsBillingRow {
+  ownerCode: string;
+  snap1Gallons: number;
+  snap2Gallons: number;
+  snap3Gallons: number;
+  billingGallons: number;
+  pallets: number;
   proration: number;
   rate: number;
   totalCost: number;
@@ -247,12 +286,14 @@ export interface BillingResults {
   auditRows: AuditRow[];
   bulkInventory: BulkBillingRow[];
   barrelInventory: BarrelBillingRow[];
+  caseGoodsInventory: CaseGoodsBillingRow[];
   summary: {
     totalActions: number;
     totalBilled: number;
     auditCount: number;
     bulkLots: number;
     barrelOwners: number;
+    caseGoodsLots: number;
   };
 }
 
@@ -281,6 +322,11 @@ export async function saveSettings(data: {
   lastUsedMonth?: string;
   lastUsedYear?: number;
   bulkStorageRate?: number;
+  barrelStorageRate?: number;
+  puncheonStorageRate?: number;
+  tankStorageRate?: number;
+  caseGoodsStorageRate?: number;
+  activeCustomerStorageMonths?: number[];
 }): Promise<{ success: boolean }> {
   const res = await apiFetch(`${BASE_URL}/settings`, {
     method: 'POST',
@@ -392,7 +438,7 @@ export async function downloadExcel(sessionId: string): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'cc-billing-atlas.xlsx';
+  a.download = 'cc-billing-calistoga.xlsx';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -450,7 +496,7 @@ export async function deleteFruitIntakeSaved(): Promise<void> {
 
 export async function updateFruitIntakeRecord(
   recordId: string,
-  updates: { contractLengthMonths?: number; programId?: string; contractRatePerTon?: number; smallLotFee?: number }
+  updates: { contractLengthMonths?: number; contractRatePerTon?: number; smallLotFee?: number }
 ): Promise<FruitIntakeRunResult> {
   const res = await apiFetch(`${BASE_URL}/fruit-intake/records/${encodeURIComponent(recordId)}`, {
     method: 'PUT',
@@ -458,6 +504,19 @@ export async function updateFruitIntakeRecord(
     body: JSON.stringify(updates),
   });
   if (!res.ok) throw new Error('Failed to update record');
+  return res.json();
+}
+
+export async function updateFruitCustomerOverride(
+  ownerCode: string,
+  override: { deposit?: number; contractLengthMonths?: number; colorOverrides?: FruitCustomerOverride['colorOverrides'] }
+): Promise<FruitIntakeRunResult> {
+  const res = await apiFetch(`${BASE_URL}/fruit-intake/customer-overrides/${encodeURIComponent(ownerCode)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(override),
+  });
+  if (!res.ok) throw new Error('Failed to update customer override');
   return res.json();
 }
 
@@ -507,6 +566,14 @@ export async function clearBillableAddOnsByMonth(yearMonth: string): Promise<Bil
   return res.json();
 }
 
+export async function clearAllBillableAddOns(): Promise<BillableAddOn[]> {
+  const res = await apiFetch(`${BASE_URL}/billable-add-ons/clear-all`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to clear all billable add-ons');
+  return res.json();
+}
+
 export async function deleteBillableAddOn(id: string): Promise<BillableAddOn[]> {
   const res = await apiFetch(`${BASE_URL}/billable-add-ons/${encodeURIComponent(id)}`, {
     method: 'DELETE',
@@ -515,14 +582,52 @@ export async function deleteBillableAddOn(id: string): Promise<BillableAddOn[]> 
   return res.json();
 }
 
-// ─── Invoice Export API ───
+// ─── Consumables API ───
 
-export async function getInvoicePreview(params: {
+export async function getConsumables(): Promise<Consumable[]> {
+  const res = await apiFetch(`${BASE_URL}/consumables`);
+  if (!res.ok) throw new Error('Failed to load consumables');
+  return res.json();
+}
+
+export async function addConsumable(consumable: Omit<Consumable, 'id'>): Promise<Consumable[]> {
+  const res = await apiFetch(`${BASE_URL}/consumables`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(consumable),
+  });
+  if (!res.ok) throw new Error('Failed to add consumable');
+  return res.json();
+}
+
+export async function deleteConsumable(id: string): Promise<Consumable[]> {
+  const res = await apiFetch(`${BASE_URL}/consumables/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete consumable');
+  return res.json();
+}
+
+// ─── QuickBooks Export API ───
+
+export interface EnabledSources {
+  actions: boolean;
+  barrel: boolean;
+  bulk: boolean;
+  fruitIntake: boolean;
+  addOns: boolean;
+  consumables: boolean;
+  caseGoods: boolean;
+}
+
+export async function getQBPreview(params: {
   sessionId: string;
   month: string;
   year: number;
   excludedCustomers?: string[];
-}): Promise<InvoicePreviewResponse> {
+  includeDeposits?: boolean;
+  enabledSources?: EnabledSources;
+}): Promise<QBPreviewResponse> {
   const res = await apiFetch(`${BASE_URL}/export/invoices/preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -530,16 +635,18 @@ export async function getInvoicePreview(params: {
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.error || 'Failed to generate invoice preview');
+    throw new Error(err.error || 'Failed to generate QB preview');
   }
   return res.json();
 }
 
-export async function downloadInvoiceZip(params: {
+export async function downloadQBCSV(params: {
   sessionId: string;
   month: string;
   year: number;
   excludedCustomers?: string[];
+  includeDeposits?: boolean;
+  enabledSources?: EnabledSources;
 }): Promise<{ blob: Blob; filename: string }> {
   const res = await apiFetch(`${BASE_URL}/export/invoices/download`, {
     method: 'POST',
@@ -548,11 +655,11 @@ export async function downloadInvoiceZip(params: {
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.error || 'Failed to download invoices');
+    throw new Error(err.error || 'Failed to download CSV');
   }
   const disposition = res.headers.get('Content-Disposition') || '';
   const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
-  const filename = filenameMatch ? filenameMatch[1] : 'Invoices.zip';
+  const filename = filenameMatch ? filenameMatch[1] : 'QB-Export.csv';
   const blob = await res.blob();
   return { blob, filename };
 }

@@ -110,7 +110,7 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
                 <td className="px-3 py-1.5 whitespace-nowrap">{row.actionType}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">
                   <a
-                    href={`https://cellar.innovint.us/#/wineries/2159258/activity/action/${row.actionId}`}
+                    href={`https://cellar.innovint.us/#/wineries/2135144/activity/action/${row.actionId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-violet-600 hover:text-violet-800 underline"

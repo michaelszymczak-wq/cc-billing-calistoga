@@ -1,8 +1,8 @@
-# Opal Moon Billing Portal - Complete Guide
+# Calistoga Billing Portal - Complete Guide
 
-Welcome to the Opal Moon Billing Portal documentation. This guide covers everything you need to get started with the billing system and use it effectively.
+Welcome to the Calistoga Billing Portal documentation. This guide covers everything you need to get started with the billing system and use it effectively.
 
-The Opal Moon Billing Portal connects to your InnoVint cellar management system and automates the billing process for winery services. It pulls action data from InnoVint, matches each action to your configured rate rules, and produces detailed billing reports and invoices.
+The Calistoga Billing Portal connects to your InnoVint cellar management system and automates the billing process for winery services. It pulls action data from InnoVint, matches each action to your configured rate rules, and produces detailed billing reports and invoices.
 
 ### What the portal handles
 
@@ -372,7 +372,7 @@ Rectified actions replace the original unmatched row in the Actions tab and appe
 
 ## Excel Export
 
-Click **Download Excel** to generate a multi-sheet workbook (`cc-billing-atlas.xlsx`):
+Click **Download Excel** to generate a multi-sheet workbook (`cc-billing-calistoga.xlsx`):
 
 | Sheet | Contents |
 |-------|----------|

@@ -5,7 +5,7 @@
       {
         "source": "/api/**",
         "run": {
-          "serviceId": "cc-billing-atlas",
+          "serviceId": "cc-billing-calistoga",
           "region": "us-central1"
         }
       },

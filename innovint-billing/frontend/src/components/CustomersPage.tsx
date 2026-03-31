@@ -8,7 +8,7 @@ interface CustomersPageProps {
 }
 
 function emptyRecord(): CustomerRecord {
-  return { ownerName: '', code: '', displayName: '', address: '', phone: '', email: '' };
+  return { ownerName: '', code: '', displayName: '', address: '', phone: '', email: '', isActive: true };
 }
 
 export default function CustomersPage({ customers, onCustomersChange, unmappedOwners = [] }: CustomersPageProps) {
@@ -25,7 +25,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [dirty, setDirty] = useState(false);
 
-  const updateRow = (idx: number, field: keyof CustomerRecord, value: string) => {
+  const updateRow = (idx: number, field: keyof CustomerRecord, value: string | boolean) => {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
     setDirty(true);
   };
@@ -74,6 +74,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
             address: parts[3] || '',
             phone: parts[4] || '',
             email: parts[5] || '',
+            isActive: true,
           });
         }
       }
@@ -96,6 +97,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b">
+              <th className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap w-16">Active?</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Owner Name</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Code</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Display Name</th>
@@ -110,6 +112,14 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
               const isUnmapped = unmappedSet.has(row.ownerName) && !row.code.trim();
               return (
                 <tr key={idx} className={`border-b ${isUnmapped ? 'bg-amber-50' : 'hover:bg-gray-50'}`}>
+                  <td className="px-1 py-1 text-center">
+                    <input
+                      type="checkbox"
+                      checked={row.isActive !== false}
+                      onChange={e => updateRow(idx, 'isActive', e.target.checked)}
+                      className="h-4 w-4 accent-violet-600"
+                    />
+                  </td>
                   <td className="px-1 py-1">
                     <input
                       type="text"

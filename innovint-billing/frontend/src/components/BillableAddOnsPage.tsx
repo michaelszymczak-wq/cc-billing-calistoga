@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  getBillableAddOns, addBillableAddOn, deleteBillableAddOn, clearBillableAddOnsByMonth,
+  getBillableAddOns, addBillableAddOn, deleteBillableAddOn, clearAllBillableAddOns,
   BillableAddOn, RateRule,
 } from '../api/client';
 import { UserRole } from '../auth/AuthContext';
@@ -24,14 +24,6 @@ function todayStr(): string {
   return d.toISOString().slice(0, 10);
 }
 
-function getPreviousMonth(): { yearMonth: string; label: string } {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-  return { yearMonth, label };
-}
 
 export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: BillableAddOnsPageProps) {
   const [addOns, setAddOns] = useState<BillableAddOn[]>([]);
@@ -60,7 +52,7 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
   const computedTotal = selectedRule ? Math.round(selectedRule.rate * qty * 100) / 100 : 0;
 
   const handleAdd = () => {
-    setNewRow({ date: todayStr(), rateRuleId: '', quantity: '', ownerCode: ownerCodes[0] || '', notes: '' });
+    setNewRow({ date: todayStr(), rateRuleId: '', quantity: '', ownerCode: '', notes: '' });
   };
 
   const handleCancel = () => {
@@ -91,13 +83,10 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
     }
   };
 
-  const prevMonth = getPreviousMonth();
-  const prevMonthCount = addOns.filter((a) => a.date.startsWith(prevMonth.yearMonth)).length;
-
-  const handleClearMonth = async () => {
-    if (!window.confirm(`Clear ${prevMonthCount} add-on(s) from ${prevMonth.label}?`)) return;
+  const handleClearAll = async () => {
+    if (!window.confirm(`Clear all ${addOns.length} add-on(s)?`)) return;
     try {
-      const updated = await clearBillableAddOnsByMonth(prevMonth.yearMonth);
+      const updated = await clearAllBillableAddOns();
       setAddOns(updated);
     } catch {
       // ignore
@@ -125,11 +114,11 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
           <div className="flex gap-2">
             {canDelete && (
               <button
-                onClick={handleClearMonth}
-                disabled={prevMonthCount === 0}
+                onClick={handleClearAll}
+                disabled={addOns.length === 0}
                 className="flex-1 sm:flex-none px-4 py-2.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Clear {prevMonth.label} ({prevMonthCount})
+                Clear All
               </button>
             )}
             <button
@@ -187,6 +176,7 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
                   onChange={(e) => setNewRow({ ...newRow, ownerCode: e.target.value })}
                   className="w-full border rounded px-3 py-2 text-sm"
                 >
+                  <option value="">-- Select --</option>
                   {ownerCodes.map((code) => (
                     <option key={code} value={code}>{code}</option>
                   ))}
@@ -222,7 +212,7 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
             <div className="flex gap-2 pt-1">
               <button
                 onClick={handleSave}
-                disabled={!selectedRule || qty <= 0 || adding}
+                disabled={!selectedRule || qty <= 0 || !newRow?.ownerCode || adding}
                 className="flex-1 py-2.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50 font-medium"
               >
                 {adding ? 'Saving...' : 'Save'}
@@ -297,6 +287,7 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
                         onChange={(e) => setNewRow({ ...newRow, ownerCode: e.target.value })}
                         className="border rounded px-2 py-1 text-sm w-32"
                       >
+                        <option value="">-- Select --</option>
                         {ownerCodes.map((code) => (
                           <option key={code} value={code}>{code}</option>
                         ))}
@@ -324,7 +315,7 @@ export default function BillableAddOnsPage({ rateRules, ownerCodes, role }: Bill
                       <div className="flex gap-1">
                         <button
                           onClick={handleSave}
-                          disabled={!selectedRule || qty <= 0 || adding}
+                          disabled={!selectedRule || qty <= 0 || !newRow?.ownerCode || adding}
                           className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:opacity-50"
                         >
                           Save

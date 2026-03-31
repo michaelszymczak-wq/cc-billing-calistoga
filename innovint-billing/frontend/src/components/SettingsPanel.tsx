@@ -16,18 +16,25 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
   const [errorMsg, setErrorMsg] = useState('');
   const [barrelSnapshots, setBarrelSnapshots] = useState<BarrelSnapshots>({ snap1Day: 1, snap2Day: 15, snap3Day: 'last' });
   const [bulkStorageRate, setBulkStorageRate] = useState<number>(0);
+  const [barrelStorageRate, setBarrelStorageRate] = useState<number>(21);
+  const [puncheonStorageRate, setPuncheonStorageRate] = useState<number>(50);
+  const [tankStorageRate, setTankStorageRate] = useState<number>(0);
+  const [caseGoodsStorageRate, setCaseGoodsStorageRate] = useState<number>(0);
   const [snapStatus, setSnapStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [fruitSettings, setFruitSettings] = useState<FruitIntakeSettings>({
     actionTypeKey: 'FRUITINTAKE',
     vintageLookback: 3,
     apiPageDelaySeconds: 5,
-    programs: [],
+    colorRateTiers: [],
+    tierByColor: true,
     minProcessingFee: 1000,
-    defaultContractMonths: 9,
+    defaultContractMonths: 12,
     smallLotFee: 1000,
     smallLotThresholdTons: 2.0,
   });
   const [fruitStatus, setFruitStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [activeStorageMonths, setActiveStorageMonths] = useState<number[]>([1, 2, 3, 4, 5, 6]);
+  const [storageMonthStatus, setStorageMonthStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     getSettings()
@@ -37,7 +44,12 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
         setHasToken(s.hasToken);
         if (s.barrelSnapshots) setBarrelSnapshots(s.barrelSnapshots);
         if (s.bulkStorageRate !== undefined) setBulkStorageRate(s.bulkStorageRate);
+        if (s.barrelStorageRate !== undefined) setBarrelStorageRate(s.barrelStorageRate);
+        if (s.puncheonStorageRate !== undefined) setPuncheonStorageRate(s.puncheonStorageRate);
+        if (s.tankStorageRate !== undefined) setTankStorageRate(s.tankStorageRate);
+        if (s.caseGoodsStorageRate !== undefined) setCaseGoodsStorageRate(s.caseGoodsStorageRate);
         if (s.fruitIntakeSettings) setFruitSettings(s.fruitIntakeSettings);
+        if (s.activeCustomerStorageMonths) setActiveStorageMonths(s.activeCustomerStorageMonths);
       })
       .catch(() => {
         // Settings not found yet
@@ -109,39 +121,136 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
         )}
       </div>
 
-      {/* Bulk Storage Rate */}
+      {/* Storage Rates */}
       <div className="mt-8 pt-8 border-t border-gray-200">
-        <h3 className="text-base font-semibold mb-2">Bulk Storage Rate</h3>
+        <h3 className="text-base font-semibold mb-2">Bulk Storage Rates</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Rate per gallon charged for bulk wine storage. Applied to 3-snapshot billing.
+          Rates for bulk, barrel, puncheon, and tank storage. Applied to 3-snapshot billing.
         </p>
-        <div className="max-w-xs">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Rate ($/gal)</label>
-          <input
-            type="number"
-            step="0.01"
-            min={0}
-            value={bulkStorageRate}
-            onChange={(e) => setBulkStorageRate(parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-          />
+        <div className="space-y-3 max-w-md">
+          <div className="grid grid-cols-2 gap-4 items-end">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bulk ($/gal)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={bulkStorageRate}
+                onChange={(e) => setBulkStorageRate(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Barrel ($/barrel)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={barrelStorageRate}
+                onChange={(e) => setBarrelStorageRate(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Puncheon ($/puncheon)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={puncheonStorageRate}
+                onChange={(e) => setPuncheonStorageRate(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tank ($/gal)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={tankStorageRate}
+                onChange={(e) => setTankStorageRate(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Case Goods ($/pallet)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={caseGoodsStorageRate}
+                onChange={(e) => setCaseGoodsStorageRate(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+          </div>
           <button
             onClick={async () => {
               setStatus('saving');
               try {
-                await saveSettings({ bulkStorageRate });
+                await saveSettings({ bulkStorageRate, barrelStorageRate, puncheonStorageRate, tankStorageRate, caseGoodsStorageRate });
                 setStatus('success');
                 setTimeout(() => setStatus('idle'), 2000);
               } catch {
                 setStatus('error');
-                setErrorMsg('Failed to save bulk storage rate');
+                setErrorMsg('Failed to save storage rates');
               }
             }}
             disabled={status === 'saving'}
-            className="mt-2 px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50 transition-colors"
           >
-            {status === 'saving' ? 'Saving...' : 'Save Bulk Storage Rate'}
+            {status === 'saving' ? 'Saving...' : 'Save Storage Rates'}
           </button>
+        </div>
+      </div>
+
+      {/* Active Customer Storage Months */}
+      <div className="mt-8 pt-8 border-t border-gray-200">
+        <h3 className="text-base font-semibold mb-2">Active Customer Storage Months</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Checked months bill active customers for barrel storage; unchecked months bill inactive customers.
+        </p>
+        <div className="flex flex-wrap gap-3 max-w-md">
+          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((label, idx) => {
+            const monthNum = idx + 1;
+            const checked = activeStorageMonths.includes(monthNum);
+            return (
+              <label key={monthNum} className="flex items-center gap-1.5 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    setActiveStorageMonths((prev) =>
+                      e.target.checked ? [...prev, monthNum].sort((a, b) => a - b) : prev.filter((m) => m !== monthNum)
+                    );
+                  }}
+                  className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                />
+                {label}
+              </label>
+            );
+          })}
+        </div>
+        <div className="mt-3">
+          <button
+            onClick={async () => {
+              setStorageMonthStatus('saving');
+              try {
+                await saveSettings({ activeCustomerStorageMonths: activeStorageMonths });
+                setStorageMonthStatus('success');
+                setTimeout(() => setStorageMonthStatus('idle'), 2000);
+              } catch {
+                setStorageMonthStatus('error');
+              }
+            }}
+            disabled={storageMonthStatus === 'saving'}
+            className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50 transition-colors"
+          >
+            {storageMonthStatus === 'saving' ? 'Saving...' : 'Save Storage Month Settings'}
+          </button>
+          {storageMonthStatus === 'success' && <p className="text-sm text-green-600 mt-1">Storage month settings saved.</p>}
+          {storageMonthStatus === 'error' && <p className="text-sm text-red-600 mt-1">Failed to save storage month settings.</p>}
         </div>
       </div>
 
@@ -216,7 +325,7 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
       <div className="mt-8 pt-8 border-t border-gray-200">
         <h3 className="text-base font-semibold mb-2">Fruit Intake</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Configure fruit intake API settings and contract length rules.
+          Configure fruit intake API settings and installment rules.
         </p>
         <div className="space-y-3 max-w-md">
           <div>
@@ -253,55 +362,70 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
             </div>
           </div>
 
-          {/* Programs */}
+          {/* Color Rate Tiers */}
           <div className="mt-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Programs (rate per ton by lot tag)</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">Color Rate Tiers (rate per ton by color + tonnage)</p>
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_1fr_120px_auto] gap-2 text-xs font-medium text-gray-500 uppercase">
-                <span>Name</span>
-                <span>Description</span>
+              <div className="grid grid-cols-[1fr_100px_100px_120px_auto] gap-2 text-xs font-medium text-gray-500 uppercase">
+                <span>Color</span>
+                <span>Min Tons</span>
+                <span>Max Tons</span>
                 <span>Rate/Ton ($)</span>
                 <span></span>
               </div>
-              {(fruitSettings.programs || []).map((prog, idx) => (
-                <div key={idx} className="grid grid-cols-[1fr_1fr_120px_auto] gap-2">
+              {(fruitSettings.colorRateTiers || []).map((tier, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_100px_100px_120px_auto] gap-2">
                   <input
                     type="text"
-                    value={prog.name}
+                    value={tier.color}
                     onChange={(e) => {
-                      const programs = [...(fruitSettings.programs || [])];
-                      programs[idx] = { ...programs[idx], name: e.target.value };
-                      setFruitSettings((p) => ({ ...p, programs }));
+                      const tiers = [...(fruitSettings.colorRateTiers || [])];
+                      tiers[idx] = { ...tiers[idx], color: e.target.value };
+                      setFruitSettings((p) => ({ ...p, colorRateTiers: tiers }));
                     }}
                     className="px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="e.g. Program #1"
-                  />
-                  <input
-                    type="text"
-                    value={prog.description}
-                    onChange={(e) => {
-                      const programs = [...(fruitSettings.programs || [])];
-                      programs[idx] = { ...programs[idx], description: e.target.value };
-                      setFruitSettings((p) => ({ ...p, programs }));
-                    }}
-                    className="px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="e.g. Red Wine"
+                    placeholder="e.g. Red"
                   />
                   <input
                     type="number"
                     step="0.01"
-                    value={prog.ratePerTon}
+                    min={0}
+                    value={tier.minTons}
                     onChange={(e) => {
-                      const programs = [...(fruitSettings.programs || [])];
-                      programs[idx] = { ...programs[idx], ratePerTon: parseFloat(e.target.value) || 0 };
-                      setFruitSettings((p) => ({ ...p, programs }));
+                      const tiers = [...(fruitSettings.colorRateTiers || [])];
+                      tiers[idx] = { ...tiers[idx], minTons: parseFloat(e.target.value) || 0 };
+                      setFruitSettings((p) => ({ ...p, colorRateTiers: tiers }));
+                    }}
+                    className="px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={tier.maxTons}
+                    onChange={(e) => {
+                      const tiers = [...(fruitSettings.colorRateTiers || [])];
+                      tiers[idx] = { ...tiers[idx], maxTons: parseFloat(e.target.value) || 0 };
+                      setFruitSettings((p) => ({ ...p, colorRateTiers: tiers }));
+                    }}
+                    className="px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+                    placeholder="0 = unlimited"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={tier.ratePerTon}
+                    onChange={(e) => {
+                      const tiers = [...(fruitSettings.colorRateTiers || [])];
+                      tiers[idx] = { ...tiers[idx], ratePerTon: parseFloat(e.target.value) || 0 };
+                      setFruitSettings((p) => ({ ...p, colorRateTiers: tiers }));
                     }}
                     className="px-2 py-1.5 border border-gray-300 rounded-md text-sm"
                   />
                   <button
                     onClick={() => {
-                      const programs = (fruitSettings.programs || []).filter((_, i) => i !== idx);
-                      setFruitSettings((p) => ({ ...p, programs }));
+                      const tiers = (fruitSettings.colorRateTiers || []).filter((_, i) => i !== idx);
+                      setFruitSettings((p) => ({ ...p, colorRateTiers: tiers }));
                     }}
                     className="px-2 text-red-500 hover:text-red-700 text-sm"
                   >
@@ -311,20 +435,31 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
               ))}
               <button
                 onClick={() => {
-                  const id = `prog_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                  const id = `tier_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                   setFruitSettings((p) => ({
                     ...p,
-                    programs: [...(p.programs || []), { id, name: '', description: '', ratePerTon: 0 }],
+                    colorRateTiers: [...(p.colorRateTiers || []), { id, color: '', minTons: 0, maxTons: 0, ratePerTon: 0 }],
                   }));
                 }}
                 className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
               >
-                + Add Program
+                + Add Tier
               </button>
+            </div>
+            <div className="mt-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={fruitSettings.tierByColor ?? true}
+                  onChange={(e) => setFruitSettings((p) => ({ ...p, tierByColor: e.target.checked }))}
+                  className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                />
+                Tier by per-color tonnage (unchecked = total customer tonnage)
+              </label>
             </div>
           </div>
 
-          {/* Min Processing Fee & Default Contract Months */}
+          {/* Min Processing Fee & Default Installment Months */}
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Min Processing Fee ($)</label>
@@ -337,12 +472,12 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Default Contract Length (months)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Default Installment Length (months)</label>
               <input
                 type="number"
                 min={1}
                 value={fruitSettings.defaultContractMonths ?? 9}
-                onChange={(e) => setFruitSettings((p) => ({ ...p, defaultContractMonths: parseInt(e.target.value) || 9 }))}
+                onChange={(e) => setFruitSettings((p) => ({ ...p, defaultContractMonths: parseInt(e.target.value) || 12 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
             </div>

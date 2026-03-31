@@ -8,10 +8,11 @@ import actionsRouter from './routes/actions';
 import fruitIntakeRouter from './routes/fruitIntake';
 import billableAddOnsRouter from './routes/billableAddOns';
 import invoiceExportRouter from './routes/invoiceExport';
+import consumablesRouter from './routes/consumables';
 import usersRouter from './routes/users';
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3007;
 
 // Serve frontend static files in production
 const publicDir = path.join(__dirname, '..', 'public');
@@ -23,7 +24,7 @@ if (hasPublic) {
 } else {
   // Development: frontend on separate port needs CORS
   app.use(cors({
-    origin: ['http://localhost:5175', 'http://127.0.0.1:5175', 'http://localhost:5176', 'http://127.0.0.1:5176'],
+    origin: ['http://localhost:5177', 'http://127.0.0.1:5177', 'http://localhost:5178', 'http://127.0.0.1:5178'],
     credentials: true,
   }));
 }
@@ -41,6 +42,7 @@ app.use('/api/settings', authenticate, requireRole('admin', 'team_member'), sett
 app.use('/api/fruit-intake', authenticate, requireRole('admin', 'team_member'), fruitIntakeRouter);
 app.use('/api/billable-add-ons', billableAddOnsRouter);                                    // mixed auth per-route
 app.use('/api/export/invoices', authenticate, requireRole('admin', 'team_member'), invoiceExportRouter);
+app.use('/api/consumables', authenticate, requireRole('admin', 'team_member'), consumablesRouter);
 app.use('/api', authenticate, requireRole('admin', 'team_member'), actionsRouter);
 
 // SPA fallback — serve index.html for non-API routes
@@ -51,5 +53,5 @@ if (hasPublic) {
 }
 
 app.listen(PORT, () => {
-  console.log(`CC Billing Atlas running on http://localhost:${PORT}`);
+  console.log(`CC Billing Calistoga running on http://localhost:${PORT}`);
 });

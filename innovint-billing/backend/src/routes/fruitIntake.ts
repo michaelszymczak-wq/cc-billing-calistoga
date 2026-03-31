@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { loadSettings, saveSettings } from '../persistence';
 import { emitProgress, generateSessionId } from './actions';
-import { runFruitIntake, recalculateRecord, recalculateRecordWithProgram } from '../services/fruitIntakeService';
+import { runFruitIntake, recalculateRecord } from '../services/fruitIntakeService';
 
 const router = Router();
 
@@ -67,12 +67,11 @@ router.delete('/saved', async (_req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// PUT /api/fruit-intake/records/:recordId — update contract length, program, rate, or small lot fee
+// PUT /api/fruit-intake/records/:recordId — update contract length, rate, or small lot fee
 router.put('/records/:recordId', async (req: Request, res: Response) => {
   const { recordId } = req.params;
-  const { contractLengthMonths, programId, contractRatePerTon, smallLotFee } = req.body as {
+  const { contractLengthMonths, contractRatePerTon, smallLotFee } = req.body as {
     contractLengthMonths?: number;
-    programId?: string;
     contractRatePerTon?: number;
     smallLotFee?: number;
   };
@@ -96,7 +95,6 @@ router.put('/records/:recordId', async (req: Request, res: Response) => {
     return;
   }
 
-  const programs = settings.fruitIntakeSettings?.programs || [];
   const minProcessingFee = settings.fruitIntakeSettings?.minProcessingFee || 0;
   let record = fruitIntake.records[idx];
 
@@ -108,16 +106,54 @@ router.put('/records/:recordId', async (req: Request, res: Response) => {
     record = { ...record, smallLotFee };
   }
 
-  // Apply program change (sets rate)
-  if (programId !== undefined) {
-    record = recalculateRecordWithProgram(record, programId, programs, minProcessingFee);
-  }
-
   // Recalculate totals with current or new contract length
   const months = contractLengthMonths ?? record.contractLengthMonths;
   record = recalculateRecord(record, months, minProcessingFee);
 
   fruitIntake.records[idx] = record;
+  settings.fruitIntake = fruitIntake;
+  await saveSettings(settings);
+
+  res.json(fruitIntake);
+});
+
+// PUT /api/fruit-intake/customer-overrides/:ownerCode — upsert customer override
+router.put('/customer-overrides/:ownerCode', async (req: Request, res: Response) => {
+  const { ownerCode } = req.params;
+  const { deposit, contractLengthMonths, colorOverrides } = req.body as {
+    deposit?: number;
+    contractLengthMonths?: number;
+    colorOverrides?: Array<{ color: string; tonsOverride?: number; costOverride?: number }>;
+  };
+
+  const settings = await loadSettings();
+  const fruitIntake = settings.fruitIntake;
+
+  if (!fruitIntake) {
+    res.status(404).json({ error: 'No fruit intake data found' });
+    return;
+  }
+
+  if (!fruitIntake.customerOverrides) {
+    fruitIntake.customerOverrides = [];
+  }
+
+  const idx = fruitIntake.customerOverrides.findIndex(o => o.ownerCode === ownerCode);
+  const existing = idx >= 0 ? fruitIntake.customerOverrides[idx] : { ownerCode, deposit: 0 };
+
+  const updated = {
+    ...existing,
+    ...(deposit !== undefined ? { deposit } : {}),
+    ...(contractLengthMonths !== undefined ? { contractLengthMonths } : {}),
+    ...(colorOverrides !== undefined ? { colorOverrides } : {}),
+  };
+
+  if (idx >= 0) {
+    fruitIntake.customerOverrides[idx] = updated;
+  } else {
+    fruitIntake.customerOverrides.push(updated);
+  }
+
   settings.fruitIntake = fruitIntake;
   await saveSettings(settings);
 

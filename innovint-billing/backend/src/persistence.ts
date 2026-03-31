@@ -29,28 +29,23 @@ export function defaultSettings(): AppSettings {
     lastUsedYear: new Date().getFullYear(),
     barrelSnapshots: { snap1Day: 1, snap2Day: 15, snap3Day: 'last' },
     bulkStorageRate: 0,
+    barrelStorageRate: 21,
+    puncheonStorageRate: 50,
+    tankStorageRate: 0,
+    caseGoodsStorageRate: 0,
     fruitIntake: null,
     customers: [],
     billableAddOns: [],
+    consumables: [],
+    activeCustomerStorageMonths: [1, 2, 3, 4, 5, 6],
     fruitIntakeSettings: {
       actionTypeKey: 'FRUITINTAKE',
       vintageLookback: 3,
       apiPageDelaySeconds: 5,
-      programs: [
-        { id: 'prog_1', name: 'Program #1', description: 'Red Wine', ratePerTon: 2300 },
-        { id: 'prog_2', name: 'Program #2', description: 'White Wine', ratePerTon: 2200 },
-        { id: 'prog_3', name: 'Program #3', description: 'Rose/White in Tank', ratePerTon: 2000 },
-        { id: 'prog_4', name: 'Program #4', description: 'Sparkling Rose/White', ratePerTon: 2200 },
-        { id: 'prog_5', name: 'Program #5', description: 'Sparkling Wine Crush & Go 14 Days', ratePerTon: 2000 },
-        { id: 'prog_6', name: 'Program #6', description: 'Red Wine', ratePerTon: 1590 },
-        { id: 'prog_7', name: 'Program #7', description: 'White Wine', ratePerTon: 1520 },
-        { id: 'prog_8', name: 'Program #8', description: 'Rose/White aged in tank', ratePerTon: 1470 },
-        { id: 'prog_1ai', name: 'Program #1 AI', description: 'Red Wine All-Inclusive', ratePerTon: 2400 },
-        { id: 'prog_2ai', name: 'Program #2 AI', description: 'White Wine All-Inclusive', ratePerTon: 2328 },
-        { id: 'prog_3ai', name: 'Program #3 AI', description: 'Rose/White in Tank All-Inclusive', ratePerTon: 2256 },
-      ],
+      colorRateTiers: [],
+      tierByColor: true,
       minProcessingFee: 1000,
-      defaultContractMonths: 9,
+      defaultContractMonths: 12,
       smallLotFee: 1000,
       smallLotThresholdTons: 2.0,
     },
@@ -72,6 +67,7 @@ function migrateLegacyCustomerMaps(parsed: Record<string, unknown>): CustomerRec
       address: '',
       phone: '',
       email: '',
+      isActive: true,
     });
   }
 
@@ -85,6 +81,7 @@ function migrateLegacyCustomerMaps(parsed: Record<string, unknown>): CustomerRec
         address: '',
         phone: '',
         email: '',
+        isActive: true,
       });
     }
   }
@@ -98,7 +95,10 @@ function mergeWithDefaults(parsed: Record<string, unknown>): AppSettings {
   // Migrate legacy customerMap + qbCustomerMap → customers[]
   let customers: CustomerRecord[];
   if (Array.isArray(parsed.customers)) {
-    customers = parsed.customers;
+    customers = (parsed.customers as CustomerRecord[]).map(c => ({
+      ...c,
+      isActive: c.isActive !== undefined ? c.isActive : true,
+    }));
   } else if (parsed.customerMap || parsed.qbCustomerMap) {
     customers = migrateLegacyCustomerMaps(parsed);
   } else {
@@ -113,6 +113,10 @@ function mergeWithDefaults(parsed: Record<string, unknown>): AppSettings {
     lastUsedYear: (parsed.lastUsedYear as number) ?? defaults.lastUsedYear,
     barrelSnapshots: (parsed.barrelSnapshots as AppSettings['barrelSnapshots']) ?? defaults.barrelSnapshots,
     bulkStorageRate: (parsed.bulkStorageRate as number) ?? defaults.bulkStorageRate,
+    barrelStorageRate: (parsed.barrelStorageRate as number) ?? defaults.barrelStorageRate,
+    puncheonStorageRate: (parsed.puncheonStorageRate as number) ?? defaults.puncheonStorageRate,
+    tankStorageRate: (parsed.tankStorageRate as number) ?? defaults.tankStorageRate,
+    caseGoodsStorageRate: (parsed.caseGoodsStorageRate as number) ?? defaults.caseGoodsStorageRate,
     fruitIntake: (parsed.fruitIntake as AppSettings['fruitIntake']) ?? defaults.fruitIntake,
     customers,
     fruitIntakeSettings: parsed.fruitIntakeSettings
@@ -122,6 +126,8 @@ function mergeWithDefaults(parsed: Record<string, unknown>): AppSettings {
         }
       : defaults.fruitIntakeSettings,
     billableAddOns: Array.isArray(parsed.billableAddOns) ? parsed.billableAddOns : defaults.billableAddOns,
+    consumables: Array.isArray(parsed.consumables) ? parsed.consumables : defaults.consumables,
+    activeCustomerStorageMonths: Array.isArray(parsed.activeCustomerStorageMonths) ? parsed.activeCustomerStorageMonths as number[] : defaults.activeCustomerStorageMonths,
   };
 }
 

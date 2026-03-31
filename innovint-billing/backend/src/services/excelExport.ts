@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { ActionRow, AuditRow, BarrelBillingRow, BulkBillingRow, FruitIntakeRecord } from '../types';
+import { ActionRow, AuditRow, BarrelBillingRow, BulkBillingRow, CaseGoodsBillingRow, FruitIntakeRecord } from '../types';
 
 export async function generateExcel(
   actions: ActionRow[],
@@ -7,7 +7,8 @@ export async function generateExcel(
   auditRows: AuditRow[],
   barrelInventory: BarrelBillingRow[] = [],
   fruitIntakeRecords: FruitIntakeRecord[] = [],
-  billingMonth?: string
+  billingMonth?: string,
+  caseGoodsInventory: CaseGoodsBillingRow[] = []
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'InnoVint Billing Engine';
@@ -92,11 +93,12 @@ export async function generateExcel(
   // ─── Bulk Inventory Tab ───
   const bulkSheet = workbook.addWorksheet('Bulk Inventory');
   bulkSheet.columns = [
+    { header: 'Type', key: 'type', width: 12 },
     { header: 'Owner Code', key: 'ownerCode', width: 14 },
-    { header: 'Snap 1 (gal)', key: 'snap1Volume', width: 14 },
-    { header: 'Snap 2 (gal)', key: 'snap2Volume', width: 14 },
-    { header: 'Snap 3 (gal)', key: 'snap3Volume', width: 14 },
-    { header: 'Billing Vol', key: 'billingVolume', width: 14 },
+    { header: 'Snap 1', key: 'snap1Volume', width: 14 },
+    { header: 'Snap 2', key: 'snap2Volume', width: 14 },
+    { header: 'Snap 3', key: 'snap3Volume', width: 14 },
+    { header: 'Billing Qty', key: 'billingVolume', width: 14 },
     { header: 'Proration', key: 'proration', width: 12 },
     { header: 'Rate', key: 'rate', width: 12 },
     { header: 'Total Cost', key: 'totalCost', width: 14 },
@@ -106,8 +108,9 @@ export async function generateExcel(
     cell.style = headerStyle as ExcelJS.Style;
   });
 
+  const typeLabels: Record<string, string> = { bulk: 'Bulk', barrel: 'Barrel', puncheon: 'Puncheon', tank: 'Tank' };
   for (const row of bulkInventory) {
-    bulkSheet.addRow(row);
+    bulkSheet.addRow({ ...row, type: typeLabels[row.type] || row.type || 'Bulk' });
   }
 
   ['rate', 'totalCost'].forEach((key) => {
@@ -175,7 +178,7 @@ export async function generateExcel(
       { header: 'Varietal', key: 'varietal', width: 16 },
       { header: 'Color', key: 'color', width: 10 },
       { header: 'Weight (tons)', key: 'fruitWeightTons', width: 14 },
-      { header: 'Contract (mo)', key: 'contractLengthMonths', width: 14 },
+      { header: 'Installments (mo)', key: 'contractLengthMonths', width: 14 },
       { header: 'Rate/ton', key: 'contractRatePerTon', width: 12 },
       { header: 'Total Cost', key: 'totalCost', width: 14 },
       { header: 'Monthly Amt', key: 'monthlyAmount', width: 14 },
@@ -299,6 +302,35 @@ export async function generateExcel(
         });
       }
     }
+  }
+
+  // ─── Case Goods Storage Tab ───
+  if (caseGoodsInventory.length > 0) {
+    const cgSheet = workbook.addWorksheet('Case Goods Storage');
+    cgSheet.columns = [
+      { header: 'Owner', key: 'ownerCode', width: 14 },
+      { header: 'Snap 1 (gal)', key: 'snap1Gallons', width: 14 },
+      { header: 'Snap 2 (gal)', key: 'snap2Gallons', width: 14 },
+      { header: 'Snap 3 (gal)', key: 'snap3Gallons', width: 14 },
+      { header: 'Billing Gal', key: 'billingGallons', width: 14 },
+      { header: 'Pallets', key: 'pallets', width: 10 },
+      { header: 'Proration', key: 'proration', width: 12 },
+      { header: 'Rate', key: 'rate', width: 12 },
+      { header: 'Total Cost', key: 'totalCost', width: 14 },
+    ];
+
+    cgSheet.getRow(1).eachCell((cell) => {
+      cell.style = headerStyle as ExcelJS.Style;
+    });
+
+    for (const row of caseGoodsInventory) {
+      cgSheet.addRow(row);
+    }
+
+    ['rate', 'totalCost'].forEach((key) => {
+      cgSheet.getColumn(key).numFmt = '$#,##0.00';
+    });
+    cgSheet.getColumn('proration').numFmt = '0%';
   }
 
   // Write to buffer

@@ -25,7 +25,7 @@ export async function fetchAllActions(
 
   while (offset < totalItems) {
     const url = new URL(`${BASE_URL}/wineries/${wineryId}/actions`);
-    url.searchParams.set('actionTypes', 'FILTER,ANALYSIS,CUSTOM,BOND_TO_BOND_TRANSFER_IN,BOND_TO_BOND_TRANSFER_OUT,BOTTLE,ADDITION,VOLUME_ADJUSTMENT,BOTTLING_EN_TIRAGE');
+    url.searchParams.set('actionTypes', 'FILTER,CUSTOM,BOND_TO_BOND_TRANSFER_IN,BOND_TO_BOND_TRANSFER_OUT,BOTTLE,VOLUME_ADJUSTMENT,BOTTLING_EN_TIRAGE,RACK,RACK_AND_RETURN');
     url.searchParams.set('startEffectiveAt', startDate);
     url.searchParams.set('endEffectiveAt', endDate);
     url.searchParams.set('includeWineryContents', 'True');
@@ -110,7 +110,8 @@ export async function fetchInventorySnapshot(
   wineryId: string,
   token: string,
   timestamp: string,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  lotType: string = 'JUICE_WINE'
 ): Promise<InventoryLot[]> {
   const allLots: InventoryLot[] = [];
   let offset = 0;
@@ -121,7 +122,7 @@ export async function fetchInventorySnapshot(
     url.searchParams.set('sort', 'totalContents:-1');
     url.searchParams.set('includeVessels', 'true');
     url.searchParams.set('contents', 'true');
-    url.searchParams.set('lotTypes', 'JUICE_WINE');
+    url.searchParams.set('lotTypes', lotType);
     url.searchParams.set('ngsw-bypass', 'true');
     url.searchParams.set('size', String(size));
     url.searchParams.set('offset', String(offset));

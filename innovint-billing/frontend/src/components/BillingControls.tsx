@@ -3,7 +3,7 @@ import {
   runBilling, pollBillingProgress, getBillingResults,
   downloadExcel, BillingResults, RateRule, ActionRow,
   saveBillingPrefs, getFruitIntakeSaved, FruitIntakeRunResult,
-  rectifyAction,
+  rectifyAction, getSettings, FruitCustomerOverride, FruitIntakeRecord,
 } from '../api/client';
 import ProgressBar from './ProgressBar';
 import TabView from './TabView';
@@ -11,6 +11,7 @@ import ResultsTable from './ResultsTable';
 import AuditTable from './AuditTable';
 import BulkTable from './BulkTable';
 import BarrelTable from './BarrelTable';
+import CaseGoodsTable from './CaseGoodsTable';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -25,7 +26,7 @@ export interface BillingRunState {
   running: boolean;
   progress: number;
   logs: Array<{ step: string; message: string; pct: number }>;
-  stepStatus: { actions: StepState; rates: StepState; bulk: StepState; barrels: StepState };
+  stepStatus: { actions: StepState; rates: StepState; bulk: StepState; barrels: StepState; casegoods: StepState };
   results: BillingResults | null;
   sessionId: string;
 }
@@ -37,7 +38,7 @@ export function defaultBillingRunState(month?: string, year?: number): BillingRu
     running: false,
     progress: 0,
     logs: [],
-    stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending' },
+    stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending', casegoods: 'pending' },
     results: null,
     sessionId: '',
   };
@@ -56,9 +57,15 @@ export default function BillingControls({
 }: BillingControlsProps) {
   const { month, year, running, progress, logs, stepStatus, results, sessionId } = billingState;
   const [fruitData, setFruitData] = useState<FruitIntakeRunResult | null>(null);
+  const [defaultContractMonths, setDefaultContractMonths] = useState(12);
 
   useEffect(() => {
-    getFruitIntakeSaved().then(setFruitData).catch(() => {});
+    Promise.all([getFruitIntakeSaved(), getSettings()])
+      .then(([data, settings]) => {
+        setFruitData(data);
+        setDefaultContractMonths(settings.fruitIntakeSettings?.defaultContractMonths ?? 12);
+      })
+      .catch(() => {});
   }, []);
 
   const update = useCallback(
@@ -78,13 +85,13 @@ export default function BillingControls({
       logs: [],
       results: null,
       sessionId: '',
-      stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending' },
+      stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending', casegoods: 'pending' },
     }));
 
     saveBillingPrefs({ lastUsedMonth: month, lastUsedYear: year }).catch(() => {});
 
     try {
-      const steps = ['actions', 'bulk', 'barrels'];
+      const steps = ['actions', 'bulk', 'barrels', 'casegoods'];
 
       const { sessionId: sid } = await runBilling({
         month,
@@ -112,16 +119,20 @@ export default function BillingControls({
               next.bulk = event.pct >= 100 ? 'done' : 'running';
             } else if (event.step === 'barrels') {
               next.barrels = event.pct >= 95 ? 'done' : 'running';
+            } else if (event.step === 'casegoods') {
+              next.casegoods = event.pct >= 100 ? 'done' : 'running';
             } else if (event.step === 'complete') {
               next.actions = 'done';
               next.rates = 'done';
               next.bulk = 'done';
               next.barrels = 'done';
+              next.casegoods = 'done';
             } else if (event.step === 'error') {
               if (next.actions === 'running') next.actions = 'error';
               if (next.rates === 'running') next.rates = 'error';
               if (next.bulk === 'running') next.bulk = 'error';
               if (next.barrels === 'running') next.barrels = 'error';
+              if (next.casegoods === 'running') next.casegoods = 'error';
             }
 
             return { ...prev, logs: nextLogs, progress: nextProgress, stepStatus: next };
@@ -201,6 +212,84 @@ export default function BillingControls({
     });
   }, [onBillingStateChange, sessionId]);
 
+  // Compute fruit installment total using customer-level overrides (matches InstallmentSchedule logic)
+  const fruitInstallmentTotal = useMemo(() => {
+    if (!fruitData?.records?.length) return 0;
+    const monthKey = `${month} ${year}`;
+    const overrides = fruitData.customerOverrides || [];
+    const overrideMap = new Map<string, FruitCustomerOverride>();
+    for (const o of overrides) overrideMap.set(o.ownerCode, o);
+
+    const byOwner = new Map<string, FruitIntakeRecord[]>();
+    for (const r of fruitData.records) {
+      const existing = byOwner.get(r.ownerCode) || [];
+      existing.push(r);
+      byOwner.set(r.ownerCode, existing);
+    }
+
+    let total = 0;
+    for (const [ownerCode, ownerRecords] of byOwner) {
+      const override = overrideMap.get(ownerCode);
+
+      let totalCost = 0;
+      if (override?.colorOverrides?.length) {
+        const byColor = new Map<string, FruitIntakeRecord[]>();
+        for (const r of ownerRecords) {
+          const existing = byColor.get(r.color) || [];
+          existing.push(r);
+          byColor.set(r.color, existing);
+        }
+        const coveredColors = new Set<string>();
+        for (const co of override.colorOverrides) {
+          coveredColors.add(co.color);
+          if (co.costOverride !== undefined) {
+            totalCost += co.costOverride;
+          } else {
+            const colorRecords = byColor.get(co.color) || [];
+            totalCost += colorRecords.reduce((s, r) => s + r.totalCost, 0);
+          }
+        }
+        for (const [color, colorRecords] of byColor) {
+          if (!coveredColors.has(color)) {
+            totalCost += colorRecords.reduce((s, r) => s + r.totalCost, 0);
+          }
+        }
+      } else {
+        totalCost = ownerRecords.reduce((s, r) => s + r.totalCost, 0);
+      }
+
+      const deposit = override?.deposit ?? 0;
+      const net = totalCost - deposit;
+      const months = override?.contractLengthMonths ?? defaultContractMonths;
+      const monthlyAmount = months > 0 ? Math.round((net / months) * 100) / 100 : 0;
+
+      // Find earliest contract start
+      let earliestStart = ownerRecords[0]?.contractStartMonth || '';
+      for (const r of ownerRecords) {
+        if (r.contractStartMonth && earliestStart) {
+          const rParts = r.contractStartMonth.split(' ');
+          const eParts = earliestStart.split(' ');
+          const rIdx = MONTHS.indexOf(rParts[0]) + parseInt(rParts[1]) * 12;
+          const eIdx = MONTHS.indexOf(eParts[0]) + parseInt(eParts[1]) * 12;
+          if (rIdx < eIdx) earliestStart = r.contractStartMonth;
+        }
+      }
+
+      // Check if monthKey falls within installment window
+      let mIdx = MONTHS.indexOf(earliestStart.split(' ')[0]);
+      let mYear = parseInt(earliestStart.split(' ')[1]);
+      if (mIdx === -1 || isNaN(mYear)) continue;
+      let found = false;
+      for (let i = 0; i < months; i++) {
+        if (`${MONTHS[mIdx]} ${mYear}` === monthKey) { found = true; break; }
+        mIdx++;
+        if (mIdx >= 12) { mIdx = 0; mYear++; }
+      }
+      if (found && monthlyAmount > 0) total += monthlyAmount;
+    }
+    return total;
+  }, [fruitData, month, year, defaultContractMonths]);
+
   const enabledRuleCount = rateRules.filter((r) => r.enabled).length;
 
   return (
@@ -244,16 +333,11 @@ export default function BillingControls({
           <div>
             <span className="font-medium text-green-800">Fruit Intake:</span>{' '}
             <span className="text-green-700">
-              {fruitData.records.length} active contracts
+              {fruitData.records.length} active installments
               {' | '}
               {month} {year} installment total:{' '}
               <strong>
-                ${fruitData.records
-                  .reduce((sum, r) => {
-                    const inst = r.installments.find((i) => i.month === `${month} ${year}`);
-                    return sum + (inst?.amount || 0);
-                  }, 0)
-                  .toFixed(2)}
+                ${fruitInstallmentTotal.toFixed(2)}
               </strong>
             </span>
           </div>
@@ -288,12 +372,13 @@ export default function BillingControls({
       {/* Results */}
       {results && (
         <div className="space-y-6">
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
             <SummaryCard label="Total Actions" value={results.summary.totalActions} />
             <SummaryCard label="Total Billed" value={`$${results.summary.totalBilled.toFixed(2)}`} />
             <SummaryCard label="Unmatched" value={results.summary.auditCount} color="amber" />
             <SummaryCard label="BULK Lots" value={results.summary.bulkLots} />
             <SummaryCard label="Barrel Owners" value={results.summary.barrelOwners} />
+            <SummaryCard label="Case Goods" value={results.summary.caseGoodsLots ?? 0} />
           </div>
 
           <button
@@ -324,6 +409,12 @@ export default function BillingControls({
                 content: <BarrelTable rows={results.barrelInventory} />,
               },
               {
+                id: 'casegoods',
+                label: 'Case Goods Storage',
+                badge: (results.caseGoodsInventory || []).length,
+                content: <CaseGoodsTable rows={results.caseGoodsInventory || []} />,
+              },
+              {
                 id: 'audit',
                 label: 'Audit',
                 badge: results.auditRows.length,
@@ -346,6 +437,7 @@ export default function BillingControls({
                     <SummaryCard label="Unmatched Actions" value={results.summary.auditCount} color="amber" />
                     <SummaryCard label="BULK Lots" value={results.summary.bulkLots} />
                     <SummaryCard label="Barrel Owners" value={results.summary.barrelOwners} />
+                    <SummaryCard label="Case Goods" value={results.summary.caseGoodsLots ?? 0} />
                   </div>
                 ),
               },

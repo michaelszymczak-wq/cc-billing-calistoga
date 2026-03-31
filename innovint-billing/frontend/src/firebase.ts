@@ -1,14 +1,25 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, Auth } from 'firebase/auth';
 
+// TODO: Create a new Firebase project for Calistoga and update these values
 const firebaseConfig = {
-  apiKey: "AIzaSyCWj7GVrfBeKi7LZ1PG-MPSIVvyeU7ExkU",
-  authDomain: "cc-billing-11-11.firebaseapp.com",
-  projectId: "cc-billing-atlas",
-  storageBucket: "cc-billing-atlas.firebasestorage.app",
-  messagingSenderId: "751625211556",
-  appId: "1:751625211556:web:placeholder"
+  apiKey: "",
+  authDomain: "cc-billing-calistoga.firebaseapp.com",
+  projectId: "cc-billing-calistoga",
+  storageBucket: "cc-billing-calistoga.firebasestorage.app",
+  messagingSenderId: "",
+  appId: ""
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Only initialize Firebase when not in local development (avoids errors with empty config)
+let auth: Auth;
+if (!isDev) {
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+} else {
+  auth = {} as Auth;
+}
+
+export { auth };

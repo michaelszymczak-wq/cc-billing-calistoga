@@ -122,7 +122,7 @@ Rectified actions replace the original unmatched row in the Actions tab and appe
 
 ## Excel Export
 
-Click **Download Excel** to generate a multi-sheet workbook (`cc-billing-atlas.xlsx`):
+Click **Download Excel** to generate a multi-sheet workbook (`cc-billing-calistoga.xlsx`):
 
 | Sheet | Contents |
 |-------|----------|

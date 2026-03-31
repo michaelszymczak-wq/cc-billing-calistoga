@@ -1,14 +1,12 @@
 import { Router, Request, Response } from 'express';
-import archiver from 'archiver';
 import { sessions } from './actions';
-import { loadSettings } from '../persistence';
-import { loadSessionResult } from '../persistence';
-import { buildInvoicePreview } from '../services/invoiceDataBuilder';
-import { generateInvoicePDF } from '../services/pdfInvoiceGenerator';
+import { loadSettings, loadSessionResult } from '../persistence';
+import { buildPreview, generateCSV, getShortMonthYear } from '../services/qbExport';
 
 const router = Router();
 
 async function loadSession(sessionId: string) {
+  if (!sessionId) return undefined;
   let session = sessions.get(sessionId);
   if (!session?.billingResult) {
     const stored = await loadSessionResult(sessionId);
@@ -20,97 +18,106 @@ async function loadSession(sessionId: string) {
   return session;
 }
 
-// POST /preview — generate invoice preview data
+const defaultEnabledSources = { actions: true, barrel: true, bulk: true, fruitIntake: true, addOns: true, consumables: true, caseGoods: true };
+
+// Sources that require a billing session (come from the billing run)
+const SESSION_SOURCES: (keyof typeof defaultEnabledSources)[] = ['actions', 'barrel', 'bulk', 'caseGoods'];
+
+interface RequestBody {
+  sessionId: string;
+  month: string;
+  year: number;
+  excludedCustomers?: string[];
+  includeDeposits?: boolean;
+  enabledSources?: {
+    actions: boolean;
+    barrel: boolean;
+    bulk: boolean;
+    fruitIntake: boolean;
+    addOns: boolean;
+    consumables: boolean;
+    caseGoods: boolean;
+  };
+}
+
+function needsSession(body: RequestBody): boolean {
+  const sources = body.enabledSources ?? defaultEnabledSources;
+  return SESSION_SOURCES.some(k => sources[k]);
+}
+
+async function buildFromBody(body: RequestBody) {
+  const session = await loadSession(body.sessionId);
+  const br = session?.billingResult;
+
+  const settings = await loadSettings();
+  const excluded = body.excludedCustomers ?? [];
+  const fruitRecords = settings.fruitIntake?.records || [];
+  const customerOverrides = settings.fruitIntake?.customerOverrides || [];
+  const defaultContractMonths = settings.fruitIntakeSettings?.defaultContractMonths ?? 12;
+  const addOns = settings.billableAddOns || [];
+  const consumables = settings.consumables || [];
+  const enabledSources = body.enabledSources ?? defaultEnabledSources;
+
+  const qbCustomerMap: Record<string, string> = {};
+  for (const c of settings.customers) {
+    if (c.code && c.displayName) qbCustomerMap[c.code] = c.displayName;
+  }
+
+  return buildPreview(
+    br?.actions || [],
+    br?.barrelInventory || [],
+    br?.bulkInventory || [],
+    fruitRecords,
+    addOns,
+    consumables,
+    body.month,
+    body.year,
+    excluded,
+    enabledSources,
+    qbCustomerMap,
+    customerOverrides,
+    defaultContractMonths,
+    body.includeDeposits ?? false,
+    br?.caseGoodsInventory || []
+  );
+}
+
+// POST /preview — generate QB export preview
 router.post('/preview', async (req: Request, res: Response) => {
-  const { sessionId, month, year, excludedCustomers } = req.body as {
-    sessionId: string;
-    month: string;
-    year: number;
-    excludedCustomers?: string[];
-  };
+  const body = req.body as RequestBody;
 
-  const session = await loadSession(sessionId);
-  if (!session?.billingResult) {
-    res.status(404).json({ error: 'No billing results found for this session. Run billing first.' });
-    return;
-  }
-
-  const settings = await loadSettings();
-  const excluded = excludedCustomers ?? [];
-  const fruitRecords = settings.fruitIntake?.records || [];
-  const addOns = settings.billableAddOns || [];
-
-  const preview = buildInvoicePreview(
-    session.billingResult.actions,
-    session.billingResult.barrelInventory,
-    session.billingResult.bulkInventory,
-    fruitRecords,
-    addOns,
-    month,
-    year,
-    excluded,
-    settings.customers
-  );
-
-  res.json(preview);
-});
-
-// POST /download — generate PDFs and stream as ZIP
-router.post('/download', async (req: Request, res: Response) => {
-  const { sessionId, month, year, excludedCustomers } = req.body as {
-    sessionId: string;
-    month: string;
-    year: number;
-    excludedCustomers?: string[];
-  };
-
-  const session = await loadSession(sessionId);
-  if (!session?.billingResult) {
-    res.status(404).json({ error: 'No billing results found for this session. Run billing first.' });
-    return;
-  }
-
-  const settings = await loadSettings();
-  const excluded = excludedCustomers ?? [];
-  const fruitRecords = settings.fruitIntake?.records || [];
-  const addOns = settings.billableAddOns || [];
-
-  const preview = buildInvoicePreview(
-    session.billingResult.actions,
-    session.billingResult.barrelInventory,
-    session.billingResult.bulkInventory,
-    fruitRecords,
-    addOns,
-    month,
-    year,
-    excluded,
-    settings.customers
-  );
-
-  const monthShort = month.substring(0, 3);
-  const filename = `Invoices_${monthShort}-${year}.zip`;
-
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  archive.on('error', (err) => {
-    res.status(500).json({ error: 'Failed to create ZIP archive' });
-  });
-  archive.pipe(res);
-
-  for (const customer of preview.customers) {
-    const invoices = [customer.wineryServices, customer.fruitIntake].filter(Boolean) as import('../types').CustomerInvoice[];
-    for (const invoice of invoices) {
-      const pdfBuffer = await generateInvoicePDF(invoice);
-      const safeName = invoice.customerName.replace(/[^a-zA-Z0-9_\- ]/g, '');
-      const typeSuffix = invoice.invoiceType === 'winery-services' ? 'Winery-Services' : 'Fruit-Intake';
-      const pdfFilename = `${safeName}_${typeSuffix}_${invoice.invoiceNumber}.pdf`;
-      archive.append(pdfBuffer, { name: pdfFilename });
+  if (needsSession(body)) {
+    const session = await loadSession(body.sessionId);
+    if (!session?.billingResult) {
+      res.status(404).json({ error: 'No billing results found for this session. Run billing first.' });
+      return;
     }
   }
 
-  await archive.finalize();
+  const preview = await buildFromBody(body);
+  res.json(preview);
+});
+
+// POST /download — generate and stream QB CSV
+router.post('/download', async (req: Request, res: Response) => {
+  const body = req.body as RequestBody;
+
+  if (needsSession(body)) {
+    const session = await loadSession(body.sessionId);
+    if (!session?.billingResult) {
+      res.status(404).json({ error: 'No billing results found for this session. Run billing first.' });
+      return;
+    }
+  }
+
+  const preview = await buildFromBody(body);
+  const csv = generateCSV(preview);
+  const label = getShortMonthYear(body.month, body.year);
+  const filename = `QB-Export_${label}.csv`;
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
 });
 
 export default router;

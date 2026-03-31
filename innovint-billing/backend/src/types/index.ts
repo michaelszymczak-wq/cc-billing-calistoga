@@ -127,6 +127,7 @@ export interface ActionApiItem {
       startingVolume?: { value: number; unit: string };
       volumeChange?: { value: number; unit: string };
     }>;
+    treatment?: { _id: number; name: string };
     complianceContext?: string;
     lots?: Array<{
       lot?: { _id: number; lotCode: string; taxClass?: string };
@@ -182,6 +183,7 @@ export interface RateRule {
   excludeAllInclusive?: boolean;
   vesselType?: string;
   analysisSource?: string;
+  bottleExtraDayRate?: number;
 }
 
 // ─── Processed Action Row ───
@@ -229,8 +231,9 @@ export interface AuditRow {
 // ─── Bulk Inventory ───
 
 export interface BulkBillingRow {
+  type: 'bulk' | 'barrel' | 'puncheon' | 'tank';
   ownerCode: string;
-  snap1Volume: number;
+  snap1Volume: number;  // gallons for bulk, vessel count for barrel/puncheon
   snap2Volume: number;
   snap3Volume: number;
   billingVolume: number;
@@ -276,6 +279,20 @@ export interface BarrelSnapshots {
   snap3Day: number | 'last';
 }
 
+// ─── Case Goods Storage ───
+
+export interface CaseGoodsBillingRow {
+  ownerCode: string;
+  snap1Gallons: number;
+  snap2Gallons: number;
+  snap3Gallons: number;
+  billingGallons: number;  // max of 3 snaps
+  pallets: number;         // ceil(billingGallons / 133)
+  proration: number;
+  rate: number;            // $/pallet
+  totalCost: number;       // pallets * rate * proration
+}
+
 // ─── Billing Request / Response ───
 
 export interface BillingRequest {
@@ -290,22 +307,38 @@ export interface BillingResponse {
   auditRows: AuditRow[];
   bulkInventory: BulkBillingRow[];
   barrelInventory: BarrelBillingRow[];
+  caseGoodsInventory: CaseGoodsBillingRow[];
   summary: {
     totalActions: number;
     totalBilled: number;
     auditCount: number;
     bulkLots: number;
     barrelOwners: number;
+    caseGoodsLots: number;
   };
 }
 
-// ─── Fruit Programs ───
+// ─── Fruit Color Rate Tiers ───
 
-export interface FruitProgram {
+export interface FruitColorRateTier {
   id: string;
-  name: string;           // "Program #1" — matches lot tag value
-  description: string;    // "Red Wine"
-  ratePerTon: number;     // 2300
+  color: string;        // "Red", "White", etc.
+  minTons: number;      // inclusive lower bound
+  maxTons: number;      // exclusive upper bound (0 = unlimited)
+  ratePerTon: number;
+}
+
+// ─── Fruit Customer Override ───
+
+export interface FruitCustomerOverride {
+  ownerCode: string;
+  deposit: number;
+  contractLengthMonths?: number;
+  colorOverrides?: {
+    color: string;
+    tonsOverride?: number;
+    costOverride?: number;
+  }[];
 }
 
 // ─── Fruit Intake ───
@@ -337,8 +370,7 @@ export interface FruitIntakeRecord {
   smallLotFee: number;
   installments: FruitInstallment[];
   savedAt: string;
-  programId?: string;
-  programName?: string;
+  colorRateTierId?: string;
 }
 
 export interface FruitIntakeRunResult {
@@ -349,13 +381,15 @@ export interface FruitIntakeRunResult {
   newRecords: number;
   duplicatesSkipped: number;
   records: FruitIntakeRecord[];
+  customerOverrides?: FruitCustomerOverride[];
 }
 
 export interface FruitIntakeSettings {
   actionTypeKey: string;
   vintageLookback: number;
   apiPageDelaySeconds: number;
-  programs: FruitProgram[];
+  colorRateTiers: FruitColorRateTier[];
+  tierByColor: boolean;
   minProcessingFee: number;
   defaultContractMonths: number;
   smallLotFee: number;
@@ -379,6 +413,16 @@ export interface FruitIntakeApiItem {
   block?: { _id: number; name: string };
   appellation?: { _id: number; name: string };
   grower?: { _id: number; name: string };
+}
+
+// ─── Consumables (shared costs distributed by fruit tonnage) ───
+
+export interface Consumable {
+  id: string;
+  name: string;       // e.g. "Dry Ice", "Yeast"
+  vintage: number;     // which vintage year's fruit customers share this cost
+  totalCost: number;   // total cost to distribute
+  notes: string;
 }
 
 // ─── Billable Add-Ons ───
@@ -405,6 +449,7 @@ export interface CustomerRecord {
   address: string;
   phone: string;
   email: string;
+  isActive: boolean;
 }
 
 // ─── Settings / Config ───
@@ -417,10 +462,16 @@ export interface AppSettings {
   lastUsedYear: number;
   barrelSnapshots: BarrelSnapshots;
   bulkStorageRate: number;
+  barrelStorageRate: number;
+  puncheonStorageRate: number;
+  tankStorageRate: number;
+  caseGoodsStorageRate: number;
   fruitIntake: FruitIntakeRunResult | null;
   customers: CustomerRecord[];
   fruitIntakeSettings: FruitIntakeSettings;
   billableAddOns: BillableAddOn[];
+  consumables: Consumable[];
+  activeCustomerStorageMonths: number[];
 }
 
 // ─── SSE Progress ───
@@ -437,46 +488,42 @@ export interface SessionData {
   billingResult?: BillingResponse;
 }
 
-// ─── Invoice Types ───
+// ─── QuickBooks Export Types ───
 
-export interface InvoiceLineItem {
+export interface QBLineItem {
+  arAccount: string;
+  customerJob: string;
+  date: string;
+  salesTax: string;
+  number: string;
+  class: string;
+  item: string;
   description: string;
   quantity: number;
-  price: number;
+  rate: number;
   amount: number;
+  taxCode: string;
 }
 
-export interface CustomerInvoice {
-  invoiceType: 'winery-services' | 'fruit-intake';
-  invoiceNumber: string;
-  issueDate: string;
-  title: string;
-  subtitle?: string;
-  customerName: string;
+export interface QBCustomerSummary {
   ownerCode: string;
-  customerAddress?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  lineItems: InvoiceLineItem[];
-  subtotal: number;
-  merchantFee: number;
-  totalDue: number;
+  sources: {
+    actions: { items: QBLineItem[]; subtotal: number };
+    barrel: { items: QBLineItem[]; subtotal: number };
+    bulk: { items: QBLineItem[]; subtotal: number };
+    fruitIntake: { items: QBLineItem[]; subtotal: number };
+    addOns: { items: QBLineItem[]; subtotal: number };
+    consumables: { items: QBLineItem[]; subtotal: number };
+    caseGoods: { items: QBLineItem[]; subtotal: number };
+  };
+  total: number;
 }
 
-export interface InvoiceCustomerSummary {
-  ownerCode: string;
-  customerName: string;
-  wineryServices: CustomerInvoice | null;
-  fruitIntake: CustomerInvoice | null;
-  combinedTotal: number;
-}
-
-export interface InvoicePreviewResponse {
-  customers: InvoiceCustomerSummary[];
+export interface QBPreviewResponse {
+  customers: QBCustomerSummary[];
   grandTotal: number;
-  invoiceCount: number;
-  billingMonth: string;
-  billingYear: number;
+  lineItemCount: number;
+  billingDate: string;
 }
 
 // ─── Omitted Action Types ───

@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   getFruitIntakeSaved, runFruitIntake, deleteFruitIntakeSaved,
-  pollBillingProgress, FruitIntakeRunResult, FruitIntakeRecord,
-  updateFruitIntakeRecord, getSettings, FruitProgram,
+  pollBillingProgress, FruitIntakeRunResult,
+  updateFruitIntakeRecord, updateFruitCustomerOverride,
+  FruitCustomerOverride, getSettings,
 } from '../api/client';
 import TabView from './TabView';
 import FruitRecordsTable from './FruitRecordsTable';
 import InstallmentSchedule from './InstallmentSchedule';
+import CustomerRollupTab from './CustomerRollupTab';
+import ConsumablesTab from './ConsumablesTab';
 import { getRemainingBalance } from '../utils/fruitIntakeUtils';
 
 interface FruitIntakePageProps {
@@ -24,14 +27,14 @@ export default function FruitIntakePage({ customerMap }: FruitIntakePageProps) {
   const [filterVintage, setFilterVintage] = useState('');
   const [filterColor, setFilterColor] = useState('');
   const [filterBalance, setFilterBalance] = useState<'' | 'has-balance' | 'completed'>('');
-  const [availableContractMonths, setAvailableContractMonths] = useState<number[]>([]);
-  const [programs, setPrograms] = useState<FruitProgram[]>([]);
+  const [defaultContractMonths, setDefaultContractMonths] = useState(12);
 
   const loadSaved = useCallback(() => {
     setLoading(true);
-    getFruitIntakeSaved()
-      .then((data) => {
+    Promise.all([getFruitIntakeSaved(), getSettings()])
+      .then(([data, settings]) => {
         setSavedData(data);
+        setDefaultContractMonths(settings.fruitIntakeSettings?.defaultContractMonths ?? 12);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -39,13 +42,6 @@ export default function FruitIntakePage({ customerMap }: FruitIntakePageProps) {
 
   useEffect(() => { loadSaved(); }, [loadSaved]);
 
-  useEffect(() => {
-    getSettings().then((s) => {
-      const defaultMonths = s.fruitIntakeSettings?.defaultContractMonths || 9;
-      setAvailableContractMonths([defaultMonths]);
-      setPrograms(s.fruitIntakeSettings?.programs || []);
-    }).catch(() => {});
-  }, []);
 
   const handleRun = useCallback(async () => {
     setRunning(true);
@@ -89,13 +85,16 @@ export default function FruitIntakePage({ customerMap }: FruitIntakePageProps) {
     setSavedData(result);
   }, []);
 
-  const handleProgramChange = useCallback(async (recordId: string, programId: string) => {
-    const result = await updateFruitIntakeRecord(recordId, { programId });
+  const handleFieldChange = useCallback(async (recordId: string, field: 'contractRatePerTon' | 'smallLotFee', value: number) => {
+    const result = await updateFruitIntakeRecord(recordId, { [field]: value });
     setSavedData(result);
   }, []);
 
-  const handleFieldChange = useCallback(async (recordId: string, field: 'contractRatePerTon' | 'smallLotFee', value: number) => {
-    const result = await updateFruitIntakeRecord(recordId, { [field]: value });
+  const handleCustomerOverrideChange = useCallback(async (
+    ownerCode: string,
+    override: Partial<Omit<FruitCustomerOverride, 'ownerCode'>>
+  ) => {
+    const result = await updateFruitCustomerOverride(ownerCode, override);
     setSavedData(result);
   }, []);
 
@@ -280,12 +279,35 @@ export default function FruitIntakePage({ customerMap }: FruitIntakePageProps) {
                 id: 'records',
                 label: 'Records',
                 badge: filtered.length,
-                content: <FruitRecordsTable records={filtered} availableContractMonths={availableContractMonths} onContractLengthChange={handleContractLengthChange} programs={programs} onProgramChange={handleProgramChange} onFieldChange={handleFieldChange} />,
+                content: <FruitRecordsTable records={filtered} onContractLengthChange={handleContractLengthChange} onFieldChange={handleFieldChange} />,
+              },
+              {
+                id: 'rollup',
+                label: 'Deposit and Override',
+                content: (
+                  <CustomerRollupTab
+                    records={filtered}
+                    customerOverrides={savedData?.customerOverrides || []}
+                    defaultContractMonths={defaultContractMonths}
+                    onOverrideChange={handleCustomerOverrideChange}
+                  />
+                ),
               },
               {
                 id: 'schedule',
                 label: 'Installment Schedule',
-                content: <InstallmentSchedule records={filtered} />,
+                content: (
+                  <InstallmentSchedule
+                    records={filtered}
+                    customerOverrides={savedData?.customerOverrides || []}
+                    defaultContractMonths={defaultContractMonths}
+                  />
+                ),
+              },
+              {
+                id: 'consumables',
+                label: 'Consumables',
+                content: <ConsumablesTab />,
               },
             ]}
           />

@@ -34,6 +34,14 @@ router.post('/', authenticate, requireRole('admin', 'team_member', 'cellar'), as
   res.json(settings.billableAddOns);
 });
 
+// DELETE /api/billable-add-ons/clear-all — remove all add-on rows (admin/team_member only)
+router.delete('/clear-all', authenticate, requireRole('admin', 'team_member'), async (_req: Request, res: Response) => {
+  const settings = await loadSettings();
+  settings.billableAddOns = [];
+  await saveSettings(settings);
+  res.json(settings.billableAddOns);
+});
+
 // DELETE /api/billable-add-ons/clear-month/:yearMonth — remove all rows for a given month (admin/team_member only)
 router.delete('/clear-month/:yearMonth', authenticate, requireRole('admin', 'team_member'), async (req: Request, res: Response) => {
   const { yearMonth } = req.params; // e.g. "2026-02"

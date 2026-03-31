@@ -16,9 +16,14 @@ router.get('/', async (_req: Request, res: Response) => {
     lastUsedYear: settings.lastUsedYear,
     barrelSnapshots: settings.barrelSnapshots,
     bulkStorageRate: settings.bulkStorageRate,
+    barrelStorageRate: settings.barrelStorageRate,
+    puncheonStorageRate: settings.puncheonStorageRate,
+    tankStorageRate: settings.tankStorageRate,
+    caseGoodsStorageRate: settings.caseGoodsStorageRate,
     customers: settings.customers,
     fruitIntakeSettings: settings.fruitIntakeSettings,
     billableAddOns: settings.billableAddOns,
+    activeCustomerStorageMonths: settings.activeCustomerStorageMonths,
   });
 });
 
@@ -35,10 +40,16 @@ router.post('/', async (req: Request, res: Response) => {
     lastUsedYear: body.lastUsedYear !== undefined ? body.lastUsedYear : current.lastUsedYear,
     barrelSnapshots: body.barrelSnapshots !== undefined ? body.barrelSnapshots : current.barrelSnapshots,
     bulkStorageRate: (body as Record<string, unknown>).bulkStorageRate !== undefined ? (body as Record<string, unknown>).bulkStorageRate as number : current.bulkStorageRate,
+    barrelStorageRate: (body as Record<string, unknown>).barrelStorageRate !== undefined ? (body as Record<string, unknown>).barrelStorageRate as number : current.barrelStorageRate,
+    puncheonStorageRate: (body as Record<string, unknown>).puncheonStorageRate !== undefined ? (body as Record<string, unknown>).puncheonStorageRate as number : current.puncheonStorageRate,
+    tankStorageRate: (body as Record<string, unknown>).tankStorageRate !== undefined ? (body as Record<string, unknown>).tankStorageRate as number : current.tankStorageRate,
+    caseGoodsStorageRate: (body as Record<string, unknown>).caseGoodsStorageRate !== undefined ? (body as Record<string, unknown>).caseGoodsStorageRate as number : current.caseGoodsStorageRate,
     fruitIntake: current.fruitIntake,
     customers: (body as Record<string, unknown>).customers !== undefined ? (body as Record<string, unknown>).customers as CustomerRecord[] : current.customers,
     fruitIntakeSettings: (body as Record<string, unknown>).fruitIntakeSettings !== undefined ? (body as Record<string, unknown>).fruitIntakeSettings as FruitIntakeSettings : current.fruitIntakeSettings,
     billableAddOns: (body as Record<string, unknown>).billableAddOns !== undefined ? (body as Record<string, unknown>).billableAddOns as BillableAddOn[] : current.billableAddOns,
+    consumables: current.consumables,
+    activeCustomerStorageMonths: (body as Record<string, unknown>).activeCustomerStorageMonths !== undefined ? (body as Record<string, unknown>).activeCustomerStorageMonths as number[] : current.activeCustomerStorageMonths,
   };
 
   await saveSettings(updated);
@@ -95,7 +106,8 @@ router.put('/fruit-intake-settings', async (req: Request, res: Response) => {
     actionTypeKey: body.actionTypeKey ?? current.fruitIntakeSettings.actionTypeKey,
     vintageLookback: body.vintageLookback ?? current.fruitIntakeSettings.vintageLookback,
     apiPageDelaySeconds: body.apiPageDelaySeconds ?? current.fruitIntakeSettings.apiPageDelaySeconds,
-    programs: body.programs ?? current.fruitIntakeSettings.programs,
+    colorRateTiers: body.colorRateTiers ?? current.fruitIntakeSettings.colorRateTiers,
+    tierByColor: body.tierByColor ?? current.fruitIntakeSettings.tierByColor,
     minProcessingFee: body.minProcessingFee ?? current.fruitIntakeSettings.minProcessingFee,
     defaultContractMonths: body.defaultContractMonths ?? current.fruitIntakeSettings.defaultContractMonths,
     smallLotFee: body.smallLotFee ?? current.fruitIntakeSettings.smallLotFee,

@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { ActionRow, AuditRow, BillingRequest, BillingResponse, ProgressEvent, RateRule, SessionData } from '../types';
-import { fetchAllActions, fetchInventorySnapshot, getMonthDateRange } from '../services/innovintApi';
+import { fetchAllActions, fetchInventorySnapshot, getMonthDateRange, getMonthIndex } from '../services/innovintApi';
 import { processActions, enrichCustomActionVolumes } from '../services/actionProcessor';
 import { applyRateMapping } from '../services/rateMapper';
-import { runBulkInventory } from '../services/bulkInventory';
+import { runBulkInventory, runCaseGoodsInventory } from '../services/bulkInventory';
 import { runBarrelInventory } from '../services/barrelInventory';
 import { generateExcel } from '../services/excelExport';
 import { loadSettings, saveSessionResult, loadSessionResult } from '../persistence';
@@ -188,11 +188,12 @@ router.get('/export-excel', async (req: Request, res: Response) => {
       session.billingResult.auditRows,
       session.billingResult.barrelInventory,
       fruitIntakeRecords,
-      billingMonth
+      billingMonth,
+      session.billingResult.caseGoodsInventory || []
     );
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=cc-billing-atlas.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename=cc-billing-calistoga.xlsx');
     res.send(buffer);
   } catch {
     res.status(500).json({ error: 'Failed to generate Excel file.' });
@@ -213,7 +214,8 @@ async function runBillingPipeline(
     auditRows: [],
     bulkInventory: [],
     barrelInventory: [],
-    summary: { totalActions: 0, totalBilled: 0, auditCount: 0, bulkLots: 0, barrelOwners: 0 },
+    caseGoodsInventory: [],
+    summary: { totalActions: 0, totalBilled: 0, auditCount: 0, bulkLots: 0, barrelOwners: 0, caseGoodsLots: 0 },
   };
 
   const onProgress = (event: ProgressEvent) => emitProgress(sessionId, event);
@@ -310,7 +312,10 @@ async function runBillingPipeline(
           month,
           year,
           bulkSettings.bulkStorageRate,
-          onProgress
+          onProgress,
+          bulkSettings.barrelStorageRate,
+          bulkSettings.puncheonStorageRate,
+          bulkSettings.tankStorageRate
         );
         result.summary.bulkLots = result.bulkInventory.length;
       } catch (err) {
@@ -329,7 +334,7 @@ async function runBillingPipeline(
         const currentSettings = await loadSettings();
         const barrelSnapshots = currentSettings.barrelSnapshots ?? { snap1Day: 1, snap2Day: 15, snap3Day: 'last' as const };
 
-        result.barrelInventory = await runBarrelInventory(
+        const barrelRows = await runBarrelInventory(
           wineryId,
           token,
           month,
@@ -338,11 +343,51 @@ async function runBillingPipeline(
           barrelSnapshots,
           onProgress
         );
+
+        // Filter barrel inventory by active/inactive customer based on billing month
+        // Active months (Jan-Jun default): all customers billed
+        // Inactive months (Jul-Dec default): only inactive customers billed
+        const billingMonthNum = getMonthIndex(month) + 1;
+        const activeMonths = currentSettings.activeCustomerStorageMonths ?? [1, 2, 3, 4, 5, 6];
+
+        if (activeMonths.includes(billingMonthNum)) {
+          // Active month — bill all customers, no filtering
+          result.barrelInventory = barrelRows;
+        } else {
+          // Inactive month — bill only inactive customers
+          const activeCodes = new Set(
+            (currentSettings.customers || [])
+              .filter((c) => c.isActive !== false)
+              .map((c) => c.code)
+          );
+          result.barrelInventory = barrelRows.filter((row) => {
+            const baseCode = row.ownerCode.replace(/-(Puncheon|Tirage)$/, '');
+            return !activeCodes.has(baseCode);
+          });
+        }
         result.summary.barrelOwners = result.barrelInventory.length;
       } catch (err) {
         onProgress({
           step: 'barrels',
           message: `WARNING: Barrel inventory step failed: ${err instanceof Error ? err.message : 'Unknown error'}. Step skipped.`,
+          pct: -1,
+        });
+      }
+    }
+
+    // Step 5: Case Goods Inventory
+    if (steps.includes('casegoods')) {
+      try {
+        onProgress({ step: 'casegoods', message: 'Starting case goods inventory billing...', pct: 60 });
+        const s = await loadSettings();
+        result.caseGoodsInventory = await runCaseGoodsInventory(
+          wineryId, token, month, year, s.caseGoodsStorageRate ?? 0, onProgress
+        );
+        result.summary.caseGoodsLots = result.caseGoodsInventory.length;
+      } catch (err) {
+        onProgress({
+          step: 'casegoods',
+          message: `WARNING: Case goods inventory step failed: ${err instanceof Error ? err.message : 'Unknown error'}. Step skipped.`,
           pct: -1,
         });
       }

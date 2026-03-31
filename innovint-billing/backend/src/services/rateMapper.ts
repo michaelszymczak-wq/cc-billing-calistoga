@@ -20,6 +20,7 @@ interface RateMatch {
   freeFirstPerLot: boolean;
   billingUnit?: string;
   excludeAllInclusive?: boolean;
+  matchedRule?: RateRule;
 }
 
 /**
@@ -45,6 +46,7 @@ function matchedResult(rule: RateRule, total: number): RateMatch {
     freeFirstPerLot: rule.freeFirstPerLot || false,
     billingUnit: rule.billingUnit,
     excludeAllInclusive: rule.excludeAllInclusive || false,
+    matchedRule: rule,
   };
 }
 
@@ -63,7 +65,7 @@ function effectiveQtyForUnit(
 ): number {
   switch (billingUnit) {
     case 'per hour':
-      return hours || 1;
+      return hours;
     case 'per barrel':
     case 'per vessel':
       return vesselCount || 1;
@@ -363,6 +365,7 @@ export function applyRateMapping(
   const originalSetupFees: number[] = [];
   const minDollars: number[] = [];
   const freeFirstFlags: boolean[] = [];
+  const matchedRules: Array<RateRule | null> = [];
 
   const updatedRows = rows.map((row, idx) => {
     const result = findRate(
@@ -399,6 +402,7 @@ export function applyRateMapping(
     originalSetupFees[idx] = result.setupFee;
     minDollars[idx] = result.minDollar;
     freeFirstFlags[idx] = result.freeFirstPerLot;
+    matchedRules[idx] = result.matchedRule || null;
 
     // Set quantity to the effective qty used for billing
     let displayQty = row.quantity;
@@ -491,6 +495,106 @@ export function applyRateMapping(
   for (const idx of includedSet) {
     updatedRows[idx].total = 0;
     updatedRows[idx].matchedRuleLabel = `${updatedRows[idx].matchedRuleLabel} (Included)`;
+  }
+
+  // Post-process: BOTTLE flat-rate consecutive-day billing
+  // Group matched BOTTLE rows by ownerCode, find consecutive-day runs,
+  // and replace per-case billing with flat-rate per-run billing.
+  const bottleIndices: number[] = [];
+  for (let i = 0; i < updatedRows.length; i++) {
+    if (updatedRows[i].matched && cleanKey(updatedRows[i].actionType) === 'BOTTLE' && matchedRules[i]?.billingUnit === 'flat fee') {
+      bottleIndices.push(i);
+    }
+  }
+
+  if (bottleIndices.length > 0) {
+    // Group by ownerCode
+    const byOwner = new Map<string, number[]>();
+    for (const i of bottleIndices) {
+      const owner = updatedRows[i].ownerCode;
+      if (!byOwner.has(owner)) byOwner.set(owner, []);
+      byOwner.get(owner)!.push(i);
+    }
+
+    for (const ownerIndices of byOwner.values()) {
+      // Get the matched rule (use the first row's rule — all BOTTLE flat-fee rows share the same catch-all rule)
+      const rule = matchedRules[ownerIndices[0]]!;
+      const baseFee = rule.rate;
+      const extraDayRate = rule.bottleExtraDayRate || 0;
+
+      // Extract unique dates and map indices to dates
+      const dateToIndices = new Map<string, number[]>();
+      for (const i of ownerIndices) {
+        const dateStr = updatedRows[i].date.substring(0, 10); // YYYY-MM-DD
+        if (!dateToIndices.has(dateStr)) dateToIndices.set(dateStr, []);
+        dateToIndices.get(dateStr)!.push(i);
+      }
+
+      const sortedDates = Array.from(dateToIndices.keys()).sort();
+
+      // Find consecutive-day runs (gap > 1 day = new run)
+      const runs: string[][] = [];
+      let currentRun: string[] = [sortedDates[0]];
+
+      for (let d = 1; d < sortedDates.length; d++) {
+        const prev = new Date(sortedDates[d - 1] + 'T00:00:00');
+        const curr = new Date(sortedDates[d] + 'T00:00:00');
+        const diffDays = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+        if (diffDays <= 1) {
+          currentRun.push(sortedDates[d]);
+        } else {
+          runs.push(currentRun);
+          currentRun = [sortedDates[d]];
+        }
+      }
+      runs.push(currentRun);
+
+      // For each run, compute cost and distribute proportionally by quantity (cases)
+      for (const run of runs) {
+        const daysInRun = run.length;
+        const runCost = baseFee + Math.max(0, daysInRun - 2) * extraDayRate;
+
+        // Collect all row indices in this run
+        const runIndices: number[] = [];
+        for (const date of run) {
+          runIndices.push(...dateToIndices.get(date)!);
+        }
+
+        // Total cases across this run
+        const totalCases = runIndices.reduce((sum, i) => sum + (updatedRows[i].quantity || 0), 0);
+
+        // Distribute runCost proportionally by quantity
+        if (totalCases > 0) {
+          let distributed = 0;
+          for (let k = 0; k < runIndices.length; k++) {
+            const i = runIndices[k];
+            const qty = updatedRows[i].quantity || 0;
+            if (k === runIndices.length - 1) {
+              // Last row gets remainder to avoid rounding drift
+              const share = Math.round((runCost - distributed) * 100) / 100;
+              updatedRows[i].setupFee = share;
+              updatedRows[i].rate = 0;
+              updatedRows[i].total = share;
+            } else {
+              const share = Math.round((qty / totalCases) * runCost * 100) / 100;
+              updatedRows[i].setupFee = share;
+              updatedRows[i].rate = 0;
+              updatedRows[i].total = share;
+              distributed += share;
+            }
+          }
+        } else {
+          // No cases — assign full cost to first row
+          for (const i of runIndices) {
+            updatedRows[i].rate = 0;
+            updatedRows[i].setupFee = 0;
+            updatedRows[i].total = 0;
+          }
+          updatedRows[runIndices[0]].setupFee = runCost;
+          updatedRows[runIndices[0]].total = runCost;
+        }
+      }
+    }
   }
 
   return { matched: updatedRows, auditRows };

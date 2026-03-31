@@ -1,13 +1,12 @@
 import {
+  FruitColorRateTier,
   FruitInstallment,
   FruitIntakeApiItem,
   FruitIntakeRecord,
   FruitIntakeRunResult,
   FruitIntakeSettings,
-  FruitProgram,
   ProgressEvent,
 } from '../types';
-import { cleanKey } from './rateMapper';
 
 const BASE_URL = 'https://sutter.innovint.us';
 
@@ -219,74 +218,35 @@ export async function fetchFruitLots(
 }
 
 /**
- * Build a map from lotCode to the first "Program"-matching tag and the owner name.
+ * Build a map from lotCode to the owner name from the lots API.
  */
-export function buildLotTagMap(
+export function buildLotOwnerMap(
   lots: Array<{ lotCode: string; tags: string[]; ownerName: string }>
-): Map<string, { tag: string; ownerName: string }> {
-  const map = new Map<string, { tag: string; ownerName: string }>();
+): Map<string, string> {
+  const map = new Map<string, string>();
   for (const lot of lots) {
-    // Match tags containing "#" followed by a digit (e.g. "Program #2", "Prgram #1")
-    const programTag = lot.tags.find((t) => /#\d/.test(t));
-    if (programTag || lot.ownerName) {
-      map.set(lot.lotCode, { tag: programTag || '', ownerName: lot.ownerName });
+    if (lot.ownerName) {
+      map.set(lot.lotCode, lot.ownerName);
     }
   }
   return map;
 }
 
 /**
- * Find a program by matching a tag string against program names using cleanKey.
+ * Find the matching color rate tier for a given color and customer tonnage.
+ * Filters by color (case-insensitive), then finds the tier where minTons <= customerTons < maxTons (maxTons=0 means unlimited).
  */
-export function findProgramByTag(tag: string, programs: FruitProgram[]): FruitProgram | undefined {
-  // First try exact cleanKey match (handles "Program #2" == "Program #2")
-  const cleanTag = cleanKey(tag);
-  const exactMatch = programs.find((p) => cleanKey(p.name) === cleanTag);
-  if (exactMatch) return exactMatch;
-
-  // Fallback: extract "#N..." suffix and match (handles typos like "Prgram #2" -> "Program #2")
-  const tagSuffix = tag.match(/(#\d+.*)/)?.[1]?.trim();
-  if (tagSuffix) {
-    const cleanSuffix = cleanKey(tagSuffix);
-    return programs.find((p) => {
-      const progSuffix = p.name.match(/(#\d+.*)/)?.[1]?.trim();
-      return progSuffix && cleanKey(progSuffix) === cleanSuffix;
-    });
-  }
-
-  return undefined;
-}
-
-/**
- * Recalculate a record with a specific program.
- */
-export function recalculateRecordWithProgram(
-  record: FruitIntakeRecord,
-  programId: string,
-  programs: FruitProgram[],
-  minProcessingFee: number
-): FruitIntakeRecord {
-  const program = programs.find((p) => p.id === programId);
-  if (!program) return record;
-
-  const contractRatePerTon = program.ratePerTon;
-  const totalCost = Math.max(record.fruitWeightTons * contractRatePerTon, minProcessingFee) + (record.smallLotFee || 0);
-  const monthlyAmount = record.contractLengthMonths > 0
-    ? Math.round((totalCost / record.contractLengthMonths) * 100) / 100
-    : 0;
-  const contractEndMonth = getContractEndMonth(record.contractStartMonth, record.contractLengthMonths);
-  const installments = generateInstallments(record.contractStartMonth, record.contractLengthMonths, monthlyAmount);
-
-  return {
-    ...record,
-    contractRatePerTon,
-    totalCost,
-    monthlyAmount,
-    contractEndMonth,
-    installments,
-    programId: program.id,
-    programName: program.name,
-  };
+export function findColorRateTier(
+  color: string,
+  customerTons: number,
+  tiers: FruitColorRateTier[]
+): FruitColorRateTier | undefined {
+  const colorLower = color.toLowerCase();
+  return tiers.find((t) =>
+    t.color.toLowerCase() === colorLower &&
+    customerTons >= t.minTons &&
+    (t.maxTons === 0 || customerTons < t.maxTons)
+  );
 }
 
 /**
@@ -340,12 +300,14 @@ export function getContractEndMonth(contractStartMonth: string, lengthMonths: nu
 
 /**
  * Process a single raw fruit intake API item into a FruitIntakeRecord.
+ * Rate and colorRateTierId are passed in (determined by two-pass logic in runFruitIntake).
  */
 export function processRawRecord(
   item: FruitIntakeApiItem,
   customerMap: Record<string, string>,
-  lotTagMap: Map<string, { tag: string; ownerName: string }>,
-  programs: FruitProgram[],
+  lotOwnerMap: Map<string, string>,
+  contractRatePerTon: number,
+  colorRateTierId: string | undefined,
   minProcessingFee: number,
   defaultContractMonths: number,
   smallLotFee: number = 0,
@@ -359,11 +321,8 @@ export function processRawRecord(
   const color = item.lot?.color || '';
   const varietal = item.varietal?.name || '';
 
-  // Lot tag lookup for program and owner override
-  const lotInfo = lotTagMap.get(lotCode);
-
   // Owner: prefer lot API's owner name, fall back to fruit intake API
-  const ownerName = lotInfo?.ownerName || item.access?.owners?.[0]?.name || '';
+  const ownerName = lotOwnerMap.get(lotCode) || item.access?.owners?.[0]?.name || '';
 
   // Owner code: use customerMap override if present, otherwise use ownerName directly from API
   let ownerCode: string;
@@ -375,21 +334,7 @@ export function processRawRecord(
     ownerCode = 'UNMAPPED';
   }
 
-  // Program matching via lot tags
-  let programId: string | undefined;
-  let programName: string | undefined;
-  let contractRatePerTon: number;
   const contractLengthMonths = defaultContractMonths;
-
-  const matchedProgram = lotInfo?.tag ? findProgramByTag(lotInfo.tag, programs) : undefined;
-
-  if (matchedProgram) {
-    programId = matchedProgram.id;
-    programName = matchedProgram.name;
-    contractRatePerTon = matchedProgram.ratePerTon;
-  } else {
-    contractRatePerTon = 0;
-  }
 
   const lotSmallLotFee = (smallLotThresholdTons > 0 && fruitWeightTons < smallLotThresholdTons) ? smallLotFee : 0;
   const totalCost = Math.max(fruitWeightTons * contractRatePerTon, minProcessingFee) + lotSmallLotFee;
@@ -420,8 +365,7 @@ export function processRawRecord(
     contractEndMonth,
     installments,
     savedAt: new Date().toISOString(),
-    programId,
-    programName,
+    colorRateTierId,
   };
 }
 
@@ -483,25 +427,26 @@ export async function runFruitIntake(
     onProgress
   );
 
-  // Fetch fruit lots to get tags for program matching and owner names
+  // Fetch fruit lots to get owner names
   onProgress({
     step: 'fruit-lots',
-    message: 'Fetching fruit lots for program matching...',
+    message: 'Fetching fruit lots for owner mapping...',
     pct: 52,
   });
 
   const fruitLots = await fetchFruitLots(wineryId, token, vintages, settings.apiPageDelaySeconds, onProgress);
-  const lotTagMap = buildLotTagMap(fruitLots);
+  const lotOwnerMap = buildLotOwnerMap(fruitLots);
 
-  const programs = settings.programs || [];
+  const colorRateTiers = settings.colorRateTiers || [];
+  const tierByColor = settings.tierByColor ?? true;
 
   onProgress({
     step: 'fruit-lots',
-    message: `Lot tag map: ${lotTagMap.size} lots mapped, ${programs.length} programs available.`,
+    message: `Lot owner map: ${lotOwnerMap.size} lots mapped, ${colorRateTiers.length} color rate tiers available.`,
     pct: 55,
   });
   const minProcessingFee = settings.minProcessingFee || 0;
-  const defaultContractMonths = settings.defaultContractMonths || 9;
+  const defaultContractMonths = settings.defaultContractMonths || 12;
   const smallLotFee = settings.smallLotFee || 0;
   const smallLotThresholdTons = settings.smallLotThresholdTons || 0;
 
@@ -511,13 +456,22 @@ export async function runFruitIntake(
     existingRecords.map((r) => `${r.lotCode}_${r.vintage}_${r.effectiveDate}`)
   );
 
-  let newCount = 0;
+  // ── Two-pass approach ──
+
+  // First pass: collect non-duplicate items and accumulate tonnage per customer per vintage
+  interface RawEntry {
+    item: FruitIntakeApiItem;
+    ownerCode: string;
+    color: string;
+    tons: number;
+    vintage: number;
+  }
+  const newEntries: RawEntry[] = [];
   let dupCount = 0;
-  const newRecords: FruitIntakeRecord[] = [];
 
   onProgress({
     step: 'fruit-intake',
-    message: `Processing ${rawItems.length} records...`,
+    message: `Processing ${rawItems.length} records (pass 1: tonnage collection)...`,
     pct: 60,
   });
 
@@ -525,23 +479,74 @@ export async function runFruitIntake(
     const eventId = String(item.eventId);
     const compositeKey = `${item.lot?.lotCode || ''}_${item.vintage}_${item.effectiveAt}`;
 
-    // Tier 1: exact eventId dedup
-    if (existingEventIds.has(eventId)) {
+    if (existingEventIds.has(eventId) || existingCompositeKeys.has(compositeKey)) {
       dupCount++;
       continue;
     }
 
-    // Tier 2: composite key dedup
-    if (existingCompositeKeys.has(compositeKey)) {
-      dupCount++;
-      continue;
+    const lotCode = item.lot?.lotCode || '';
+    const ownerName = lotOwnerMap.get(lotCode) || item.access?.owners?.[0]?.name || '';
+    let ownerCode: string;
+    if (ownerName && customerMap[ownerName]) {
+      ownerCode = customerMap[ownerName];
+    } else if (ownerName) {
+      ownerCode = ownerName;
+    } else {
+      ownerCode = 'UNMAPPED';
     }
+
+    const color = item.lot?.color || '';
+    const tons = item.fruitWeight?.value || 0;
+    const vintage = item.vintage || 0;
+
+    newEntries.push({ item, ownerCode, color, tons, vintage });
+    existingEventIds.add(eventId);
+    existingCompositeKeys.add(compositeKey);
+  }
+
+  // Also include existing records in tonnage calculations (vintage-specific)
+  const customerTonnageByColor = new Map<string, number>(); // key: "ownerCode|vintage|color"
+  const customerTonnageTotal = new Map<string, number>();    // key: "ownerCode|vintage"
+
+  // Count existing records' tonnage
+  for (const r of existingRecords) {
+    const colorKey = `${r.ownerCode}|${r.vintage}|${r.color.toLowerCase()}`;
+    customerTonnageByColor.set(colorKey, (customerTonnageByColor.get(colorKey) || 0) + r.fruitWeightTons);
+    const totalKey = `${r.ownerCode}|${r.vintage}`;
+    customerTonnageTotal.set(totalKey, (customerTonnageTotal.get(totalKey) || 0) + r.fruitWeightTons);
+  }
+
+  // Count new entries' tonnage
+  for (const entry of newEntries) {
+    const colorKey = `${entry.ownerCode}|${entry.vintage}|${entry.color.toLowerCase()}`;
+    customerTonnageByColor.set(colorKey, (customerTonnageByColor.get(colorKey) || 0) + entry.tons);
+    const totalKey = `${entry.ownerCode}|${entry.vintage}`;
+    customerTonnageTotal.set(totalKey, (customerTonnageTotal.get(totalKey) || 0) + entry.tons);
+  }
+
+  // Second pass: assign rates based on color + tonnage tier
+  onProgress({
+    step: 'fruit-intake',
+    message: `Processing ${newEntries.length} new records (pass 2: rate assignment)...`,
+    pct: 70,
+  });
+
+  const newRecords: FruitIntakeRecord[] = [];
+  for (const entry of newEntries) {
+    const customerTons = tierByColor
+      ? (customerTonnageByColor.get(`${entry.ownerCode}|${entry.vintage}|${entry.color.toLowerCase()}`) || 0)
+      : (customerTonnageTotal.get(`${entry.ownerCode}|${entry.vintage}`) || 0);
+
+    const tier = findColorRateTier(entry.color, customerTons, colorRateTiers);
+    const contractRatePerTon = tier?.ratePerTon || 0;
+    const colorRateTierId = tier?.id;
 
     const record = processRawRecord(
-      item,
+      entry.item,
       customerMap,
-      lotTagMap,
-      programs,
+      lotOwnerMap,
+      contractRatePerTon,
+      colorRateTierId,
       minProcessingFee,
       defaultContractMonths,
       smallLotFee,
@@ -549,10 +554,9 @@ export async function runFruitIntake(
     );
 
     newRecords.push(record);
-    existingEventIds.add(eventId);
-    existingCompositeKeys.add(compositeKey);
-    newCount++;
   }
+
+  const newCount = newRecords.length;
 
   // Merge: existing + new
   const allRecords = [...existingRecords, ...newRecords];

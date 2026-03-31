@@ -5,7 +5,7 @@ import RateTableManager from './components/RateTableManager';
 import FruitIntakePage from './components/FruitIntakePage';
 import BillableAddOnsPage from './components/BillableAddOnsPage';
 import CustomersPage from './components/CustomersPage';
-import InvoiceExportPage from './components/InvoiceExportPage';
+import QBExportPage from './components/QBExportPage';
 import LoginPage from './components/LoginPage';
 import UserManagement from './components/UserManagement';
 import { getSettings, RateRule, AppConfig, CustomerRecord, setTokenGetter } from './api/client';
@@ -121,7 +121,7 @@ export default function App() {
       )}
       {canSee('invoices') && (
         <NavItem
-          label="Invoices"
+          label="QB Export"
           active={page === 'invoices'}
           onClick={() => navigateTo('invoices')}
         />
@@ -161,7 +161,7 @@ export default function App() {
       {/* Mobile header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-indigo-900 text-white flex items-center justify-between px-4 py-3">
         <div>
-          <h1 className="text-lg font-bold tracking-tight">Opal Moon</h1>
+          <h1 className="text-lg font-bold tracking-tight">Calistoga</h1>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -199,7 +199,7 @@ export default function App() {
       {/* Desktop sidebar */}
       <nav className="hidden md:flex w-56 bg-indigo-900 text-white flex-col flex-shrink-0">
         <div className="px-4 py-5 border-b border-indigo-700">
-          <h1 className="text-lg font-bold tracking-tight">Opal Moon</h1>
+          <h1 className="text-lg font-bold tracking-tight">Calistoga</h1>
           <p className="text-xs text-indigo-300">Billing</p>
         </div>
         <div className="flex-1 py-4">
@@ -254,7 +254,7 @@ export default function App() {
           />
         )}
         {page === 'invoices' && canSee('invoices') && config && (
-          <InvoiceExportPage config={config} billingState={billingState} />
+          <QBExportPage config={config} billingState={billingState} />
         )}
         {page === 'users' && canSee('users') && (
           <UserManagement />

@@ -1,12 +1,13 @@
 {
-  "name": "cc-billing-atlas-backend",
+  "name": "cc-billing-calistoga-backend",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "seed-admin": "tsx src/seedAdmin.ts"
+    "seed-admin": "tsx src/seedAdmin.ts",
+    "migrate": "tsx src/migrateToFirestore.ts"
   },
   "dependencies": {
     "archiver": "^7.0.1",

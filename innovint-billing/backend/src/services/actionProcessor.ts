@@ -101,7 +101,7 @@ function extractHours(text: string): number {
   const m3 = p3.exec(text);
   if (m3) return parseFloat(m3[1]);
 
-  return 1; // default
+  return 0;
 }
 
 /**
@@ -124,7 +124,7 @@ function extractHoursFromNotes(text: string): number {
   const m3 = p3.exec(text);
   if (m3) return parseFloat(m3[1]);
 
-  return 1; // default
+  return 0;
 }
 
 /**
@@ -709,7 +709,7 @@ function processFilterAction(action: ActionApiItem): ActionRow[] {
     performer: action.performedBy?.name || '',
     date,
     ownerCode,
-    analysisOrNotes: notesText || getActionName(action) || 'Filter',
+    analysisOrNotes: action.actionData?.treatment?.name || notesText || getActionName(action) || 'Filter',
     hours: 0,
     rate: 0,
     setupFee: 0,
@@ -760,13 +760,64 @@ function processBottlingEnTirageAction(action: ActionApiItem): ActionRow[] {
 }
 
 /**
+ * Process a RACK or RACK_AND_RETURN action.
+ * Hours are parsed from notes containing "Billable".
+ * If no billable note is found, the action is skipped (not billable).
+ */
+function processRackAction(action: ActionApiItem): ActionRow[] {
+  const date = convertDateToPST(action.effectiveAt);
+  const lotCodes = extractAllLotCodes(action);
+  const ownerCode = extractOwnerCode(action);
+  const notesText = getNotesText(action);
+
+  // Skip if notes say "Not billable"; only process if "Billable" is present
+  if (/not\s+billable/i.test(notesText) || !/billable/i.test(notesText)) {
+    return [];
+  }
+
+  const hours = extractBillableHours(notesText);
+
+  return [{
+    actionType: action.actionType,
+    actionId: String(action._id),
+    lotCodes,
+    performer: action.performedBy?.name || '',
+    date,
+    ownerCode,
+    analysisOrNotes: notesText,
+    hours,
+    rate: 0,
+    setupFee: 0,
+    total: 0,
+    matched: false,
+    matchedRuleLabel: '',
+    rawActionType: action.actionType,
+    quantity: hours,
+    unit: 'hours',
+  }];
+}
+
+/**
+ * Parse hours from a "Billable" note.
+ * Handles: "Billable: 4hours", "Billable: 3.5", "Billable: 2 hrs"
+ */
+function extractBillableHours(text: string): number {
+  // "Billable: Nhours" or "Billable: N hrs" or "Billable: N"
+  const m = /billable\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)?/i.exec(text);
+  if (m) return parseFloat(m[1]);
+  return 0;
+}
+
+/**
  * Main processor: route each action to its handler.
  */
 export function processActions(actions: ActionApiItem[]): ActionRow[] {
   const allRows: ActionRow[] = [];
 
   for (const action of actions) {
-    if (action.actionType === 'FILTER') {
+    if (action.actionType === 'RACK' || action.actionType === 'RACK_AND_RETURN') {
+      allRows.push(...processRackAction(action));
+    } else if (action.actionType === 'FILTER') {
       allRows.push(...processFilterAction(action));
     } else if (action.actionType === 'ANALYSIS') {
       allRows.push(...processAnalysisAction(action));

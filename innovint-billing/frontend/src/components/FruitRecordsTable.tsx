@@ -1,19 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { FruitIntakeRecord, FruitProgram } from '../api/client';
+import { FruitIntakeRecord } from '../api/client';
 import { getRemainingBalance } from '../utils/fruitIntakeUtils';
 
 interface FruitRecordsTableProps {
   records: FruitIntakeRecord[];
-  availableContractMonths: number[];
   onContractLengthChange: (recordId: string, months: number) => Promise<void>;
-  programs: FruitProgram[];
-  onProgramChange: (recordId: string, programId: string) => Promise<void>;
   onFieldChange: (recordId: string, field: 'contractRatePerTon' | 'smallLotFee', value: number) => Promise<void>;
 }
 
 type SortField = 'vintage' | 'ownerCode' | 'lotCode' | 'varietal' | 'color' | 'fruitWeightTons' | 'totalCost' | 'effectiveDate' | 'remainingBalance';
 
-export default function FruitRecordsTable({ records, availableContractMonths, onContractLengthChange, programs, onProgramChange, onFieldChange }: FruitRecordsTableProps) {
+const CONTRACT_MONTHS_OPTIONS = Array.from({ length: 30 }, (_, i) => i + 1);
+
+export default function FruitRecordsTable({ records, onContractLengthChange, onFieldChange }: FruitRecordsTableProps) {
   const [sortField, setSortField] = useState<SortField>('effectiveDate');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -63,15 +62,6 @@ export default function FruitRecordsTable({ records, availableContractMonths, on
     }
   };
 
-  const handleProgramChange = async (recordId: string, programId: string) => {
-    setUpdatingId(recordId);
-    try {
-      await onProgramChange(recordId, programId);
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
   const startEdit = (id: string, field: 'contractRatePerTon' | 'smallLotFee', currentValue: number) => {
     setEditingCell({ id, field });
     setEditValue(currentValue.toString());
@@ -98,10 +88,10 @@ export default function FruitRecordsTable({ records, availableContractMonths, on
   };
 
   const exportCsv = () => {
-    const headers = ['Vintage', 'Date', 'Weigh Tag', 'Owner', 'Code', 'Lot Code', 'Varietal', 'Color', 'Weight (tons)', 'Program', 'Contract (mo)', 'Rate/ton', 'Small Lot Fee', 'Total Cost', 'Monthly Amt', 'Remaining Balance'];
+    const headers = ['Vintage', 'Date', 'Weigh Tag', 'Owner', 'Code', 'Lot Code', 'Varietal', 'Color', 'Weight (tons)', 'Installments (mo)', 'Rate/ton', 'Small Lot Fee', 'Total Cost', 'Monthly Amt', 'Remaining Balance'];
     const rows = sorted.map((r) => [
       r.vintage, r.effectiveDate, r.weighTagNumber, r.ownerName, r.ownerCode,
-      r.lotCode, r.varietal, r.color, r.fruitWeightTons, r.programName || '',
+      r.lotCode, r.varietal, r.color, r.fruitWeightTons,
       r.contractLengthMonths, r.contractRatePerTon, r.smallLotFee || 0, r.totalCost, r.monthlyAmount, r.remainingBalance,
     ]);
     const csv = [headers.join(','), ...rows.map((r) => r.map((v) => `"${v}"`).join(','))].join('\n');
@@ -151,8 +141,7 @@ export default function FruitRecordsTable({ records, availableContractMonths, on
                   {label}{sortIndicator(field)}
                 </th>
               ))}
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contract</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Installments</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rate/ton</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sm Lot</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Monthly</th>
@@ -175,19 +164,6 @@ export default function FruitRecordsTable({ records, availableContractMonths, on
                 <td className="px-3 py-1.5">{r.color}</td>
                 <td className="px-3 py-1.5 text-right">{r.fruitWeightTons.toFixed(2)}</td>
                 <td className="px-3 py-1.5 text-right">${r.totalCost.toFixed(2)}</td>
-                <td className="px-3 py-1.5">
-                  <select
-                    value={r.programId || ''}
-                    onChange={(e) => handleProgramChange(r.id, e.target.value)}
-                    disabled={updatingId !== null}
-                    className="px-1 py-0.5 border border-gray-300 rounded text-sm bg-white max-w-[120px]"
-                  >
-                    <option value="">--</option>
-                    {programs.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </td>
                 <td className="px-3 py-1.5 text-center">
                   <select
                     value={r.contractLengthMonths}
@@ -195,12 +171,9 @@ export default function FruitRecordsTable({ records, availableContractMonths, on
                     disabled={updatingId !== null}
                     className="px-1 py-0.5 border border-gray-300 rounded text-sm bg-white"
                   >
-                    {availableContractMonths.map((m) => (
+                    {CONTRACT_MONTHS_OPTIONS.map((m) => (
                       <option key={m} value={m}>{m} mo</option>
                     ))}
-                    {!availableContractMonths.includes(r.contractLengthMonths) && (
-                      <option value={r.contractLengthMonths}>{r.contractLengthMonths} mo</option>
-                    )}
                   </select>
                 </td>
                 <td className="px-3 py-1.5 text-right">
