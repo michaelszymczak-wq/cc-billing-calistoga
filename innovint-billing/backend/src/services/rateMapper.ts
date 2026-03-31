@@ -431,6 +431,17 @@ export function applyRateMapping(
         analysisOrNotes: row.analysisOrNotes,
         reason: result.reason || 'No matching rate rule',
       });
+    } else if (row.ownerCode === 'UNK') {
+      auditRows.push({
+        actionType: row.actionType,
+        actionId: row.actionId,
+        lotCodes: row.lotCodes,
+        performer: row.performer,
+        date: row.date,
+        ownerCode: row.ownerCode,
+        analysisOrNotes: row.analysisOrNotes,
+        reason: 'Unknown owner (UNK)',
+      });
     }
 
     return updatedRow;

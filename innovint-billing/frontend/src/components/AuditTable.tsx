@@ -99,7 +99,7 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
             const displayTotal = edit.totalOverride !== '' ? edit.totalOverride : (selectedRule ? calculated.toFixed(2) : '');
 
             return (
-              <tr key={`${row.actionId}-${i}`} className="border-t hover:bg-red-50/30">
+              <tr key={`${row.actionId}-${i}`} className={`border-t ${row.ownerCode === 'UNK' ? 'bg-yellow-100 hover:bg-yellow-200' : 'hover:bg-red-50/30'}`}>
                 <td className="px-3 py-1.5">{row.actionType}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">
                   <a

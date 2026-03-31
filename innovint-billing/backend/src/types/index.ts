@@ -213,6 +213,7 @@ export interface ActionRow {
   materialChargeApplies?: boolean;
   additiveQuantity?: number;
   analysisSource?: string;
+  firstVesselId?: number;
 }
 
 // ─── Audit Row ───

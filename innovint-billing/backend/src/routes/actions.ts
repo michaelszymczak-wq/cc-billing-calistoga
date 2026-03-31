@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ActionRow, AuditRow, BillingRequest, BillingResponse, ProgressEvent, RateRule, SessionData } from '../types';
 import { fetchAllActions, fetchInventorySnapshot, getMonthDateRange, getMonthIndex } from '../services/innovintApi';
-import { processActions, enrichCustomActionVolumes } from '../services/actionProcessor';
+import { processActions, enrichCustomActionVolumes, resolveUnknownOwners } from '../services/actionProcessor';
 import { applyRateMapping } from '../services/rateMapper';
 import { runBulkInventory, runCaseGoodsInventory } from '../services/bulkInventory';
 import { runBarrelInventory } from '../services/barrelInventory';
@@ -232,6 +232,7 @@ async function runBillingPipeline(
       const actionRows = processActions(rawActions);
 
       await enrichCustomActionVolumes(actionRows, wineryId, token, onProgress);
+      await resolveUnknownOwners(actionRows, wineryId, token, onProgress);
 
       // Fetch all-inclusive lot codes from inventory snapshot (if any rules use excludeAllInclusive)
       let allInclusiveLotCodes = new Set<string>();

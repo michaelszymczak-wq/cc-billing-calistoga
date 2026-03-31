@@ -206,6 +206,32 @@ export async function fetchLotVolume(
   }
 }
 
+/**
+ * Fetch owner name from a vessel by its ID.
+ * GET /wineries/{wineryId}/vessels/{vesselId}?includeLocation=true
+ * Returns access.owners[0].name or empty string.
+ */
+export async function fetchVesselOwner(
+  wineryId: string,
+  token: string,
+  vesselId: number
+): Promise<string> {
+  const url = `${BASE_URL}/wineries/${wineryId}/vessels/${vesselId}?includeLocation=true`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Access-Token ${token}`,
+        'Accept': 'application/json',
+      },
+    });
+    if (!response.ok) return '';
+    const data = await response.json() as { access?: { owners?: Array<{ name: string }> } };
+    return data.access?.owners?.[0]?.name || '';
+  } catch {
+    return '';
+  }
+}
+
 export function getMonthDateRange(month: string, year: number): { start: string; end: string } {
   const monthIndex = getMonthIndex(month);
   if (monthIndex === -1) {

@@ -1,5 +1,5 @@
 import { ActionApiItem, ActionRow, ProgressEvent } from '../types';
-import { fetchLotVolume } from './innovintApi';
+import { fetchLotVolume, fetchVesselOwner } from './innovintApi';
 
 /**
  * Convert UTC date string to PST-formatted string: YYYY-MM-DD HH:mm
@@ -443,37 +443,9 @@ function processCustomAction(action: ActionApiItem): ActionRow[] {
     displayName = combined.trim();
   }
 
-  // If vessels are present and no lotAccess owners, group by owner derived from vesselCode
-  if (vessels.length > 0 && !action.lotAccess?.owners?.length) {
-    const byOwner = new Map<string, number>();
-    for (const v of vessels) {
-      const code = ownerCodeFromVesselCode(v.vesselCode || '');
-      const owner = code || 'UNK';
-      byOwner.set(owner, (byOwner.get(owner) || 0) + 1);
-    }
-
-    return [...byOwner.entries()].map(([ownerCode, count]) => ({
-      actionType: 'CUSTOM',
-      actionId: String(action._id),
-      lotCodes,
-      performer: action.performedBy?.name || '',
-      date,
-      ownerCode,
-      analysisOrNotes: displayName,
-      hours,
-      rate: 0,
-      setupFee: 0,
-      total: 0,
-      matched: false,
-      matchedRuleLabel: '',
-      rawActionType: 'CUSTOM',
-      vesselCount: count,
-      quantity: count,
-    }));
-  }
-
   const ownerCode = extractOwnerCode(action);
   const vesselCount = vessels.length;
+  const firstVesselId = ownerCode === 'UNK' && vessels.length > 0 ? vessels[0]._id : undefined;
 
   return [{
     actionType: 'CUSTOM',
@@ -492,6 +464,7 @@ function processCustomAction(action: ActionApiItem): ActionRow[] {
     rawActionType: 'CUSTOM',
     vesselCount: vesselCount || undefined,
     quantity: vesselCount || undefined,
+    firstVesselId,
   }];
 }
 
@@ -899,6 +872,51 @@ export async function enrichCustomActionVolumes(
     if (volume !== undefined && volume > 0) {
       row.quantity = volume;
       row.unit = 'gal';
+    }
+  }
+}
+
+/**
+ * Resolve UNK owners by looking up the first vessel's owner via the API.
+ * Only applies to rows that have ownerCode === 'UNK' and a firstVesselId.
+ */
+export async function resolveUnknownOwners(
+  rows: ActionRow[],
+  wineryId: string,
+  token: string,
+  onProgress: (event: ProgressEvent) => void
+): Promise<void> {
+  const unknownRows = rows.filter(r => r.ownerCode === 'UNK' && r.firstVesselId);
+  if (unknownRows.length === 0) return;
+
+  // Deduplicate vessel lookups
+  const vesselIds = [...new Set(unknownRows.map(r => r.firstVesselId!))];
+
+  onProgress({
+    step: 'owners',
+    message: `Resolving ${vesselIds.length} unknown owner(s) via vessel lookup...`,
+    pct: 40,
+  });
+
+  const cache = new Map<number, string>();
+  let completed = 0;
+  for (const vesselId of vesselIds) {
+    const ownerName = await fetchVesselOwner(wineryId, token, vesselId);
+    cache.set(vesselId, ownerName);
+    completed++;
+    if (completed % 5 === 0 || completed === vesselIds.length) {
+      onProgress({
+        step: 'owners',
+        message: `Vessel owner lookups: ${completed}/${vesselIds.length}`,
+        pct: 40 + Math.round((completed / vesselIds.length) * 2),
+      });
+    }
+  }
+
+  for (const row of unknownRows) {
+    const resolved = cache.get(row.firstVesselId!) || '';
+    if (resolved) {
+      row.ownerCode = resolved;
     }
   }
 }
