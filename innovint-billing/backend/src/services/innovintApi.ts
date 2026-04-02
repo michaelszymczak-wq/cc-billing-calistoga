@@ -232,6 +232,71 @@ export async function fetchVesselOwner(
   }
 }
 
+/**
+ * Fetch actions by specific action types within a date range.
+ * Used by Extended Tank Time to fetch start/end actions separately.
+ */
+export async function fetchActionsByTypes(
+  wineryId: string,
+  token: string,
+  actionTypes: string[],
+  startDate: string,
+  endDate: string,
+  onProgress?: (msg: string) => void
+): Promise<ActionApiItem[]> {
+  const allActions: ActionApiItem[] = [];
+  let offset = 0;
+  let totalItems = Infinity;
+
+  while (offset < totalItems) {
+    const url = new URL(`${BASE_URL}/wineries/${wineryId}/actions`);
+    url.searchParams.set('actionTypes', actionTypes.join(','));
+    url.searchParams.set('startEffectiveAt', startDate);
+    url.searchParams.set('endEffectiveAt', endDate);
+    url.searchParams.set('sort', 'effectiveAt:-1');
+    url.searchParams.set('size', String(PAGE_SIZE));
+    url.searchParams.set('offset', String(offset));
+
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Access-Token ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+    } catch (err) {
+      if (onProgress) onProgress(`Network error fetching ${actionTypes.join(',')}: ${err instanceof Error ? err.message : 'Unknown'}`);
+      break;
+    }
+
+    if (response.status === 429) {
+      if (onProgress) onProgress('Rate limited during tank time action fetch.');
+      break;
+    }
+
+    if (!response.ok) {
+      if (onProgress) onProgress(`API error ${response.status} fetching ${actionTypes.join(',')}`);
+      break;
+    }
+
+    const contentRange = response.headers.get('content-range');
+    const { total } = parseContentRange(contentRange);
+    if (total > 0) totalItems = total;
+
+    const data = (await response.json()) as unknown;
+    const items: ActionApiItem[] = Array.isArray(data) ? data : [];
+
+    if (items.length === 0) break;
+    allActions.push(...items);
+    offset += items.length;
+
+    if (items.length < PAGE_SIZE) break;
+  }
+
+  return allActions;
+}
+
 export function getMonthDateRange(month: string, year: number): { start: string; end: string } {
   const monthIndex = getMonthIndex(month);
   if (monthIndex === -1) {

@@ -18,10 +18,10 @@ async function loadSession(sessionId: string) {
   return session;
 }
 
-const defaultEnabledSources = { actions: true, barrel: true, bulk: true, fruitIntake: true, addOns: true, consumables: true, caseGoods: true };
+const defaultEnabledSources = { actions: true, barrel: true, bulk: true, fruitIntake: true, addOns: true, consumables: true, caseGoods: true, extendedTankTime: true };
 
 // Sources that require a billing session (come from the billing run)
-const SESSION_SOURCES: (keyof typeof defaultEnabledSources)[] = ['actions', 'barrel', 'bulk', 'caseGoods'];
+const SESSION_SOURCES: (keyof typeof defaultEnabledSources)[] = ['actions', 'barrel', 'bulk', 'caseGoods', 'extendedTankTime'];
 
 interface RequestBody {
   sessionId: string;
@@ -37,6 +37,7 @@ interface RequestBody {
     addOns: boolean;
     consumables: boolean;
     caseGoods: boolean;
+    extendedTankTime: boolean;
   };
 }
 
@@ -78,7 +79,8 @@ async function buildFromBody(body: RequestBody) {
     customerOverrides,
     defaultContractMonths,
     body.includeDeposits ?? false,
-    br?.caseGoodsInventory || []
+    br?.caseGoodsInventory || [],
+    br?.extendedTankTime || []
   );
 }
 

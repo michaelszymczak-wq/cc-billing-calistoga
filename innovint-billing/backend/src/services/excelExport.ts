@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { ActionRow, AuditRow, BarrelBillingRow, BulkBillingRow, CaseGoodsBillingRow, FruitIntakeRecord } from '../types';
+import { ActionRow, AuditRow, BarrelBillingRow, BulkBillingRow, CaseGoodsBillingRow, ExtendedTankTimeRow, FruitIntakeRecord } from '../types';
 
 export async function generateExcel(
   actions: ActionRow[],
@@ -8,7 +8,8 @@ export async function generateExcel(
   barrelInventory: BarrelBillingRow[] = [],
   fruitIntakeRecords: FruitIntakeRecord[] = [],
   billingMonth?: string,
-  caseGoodsInventory: CaseGoodsBillingRow[] = []
+  caseGoodsInventory: CaseGoodsBillingRow[] = [],
+  extendedTankTime: ExtendedTankTimeRow[] = []
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'InnoVint Billing Engine';
@@ -331,6 +332,37 @@ export async function generateExcel(
       cgSheet.getColumn(key).numFmt = '$#,##0.00';
     });
     cgSheet.getColumn('proration').numFmt = '0%';
+  }
+
+  // ─── Extended Tank Time Tab ───
+  if (extendedTankTime.length > 0) {
+    const ettSheet = workbook.addWorksheet('Extended Tank Time');
+    ettSheet.columns = [
+      { header: 'Owner', key: 'ownerCode', width: 14 },
+      { header: 'Lot Code', key: 'lotCode', width: 22 },
+      { header: 'Color', key: 'color', width: 10 },
+      { header: 'Start Action', key: 'startActionType', width: 24 },
+      { header: 'End Action', key: 'endActionType', width: 20 },
+      { header: 'Start Date', key: 'startDate', width: 14 },
+      { header: 'End Date', key: 'endDate', width: 14 },
+      { header: 'Total Days', key: 'totalDays', width: 12 },
+      { header: 'Included', key: 'includedDays', width: 10 },
+      { header: 'Billable Days', key: 'billableDays', width: 14 },
+      { header: 'Daily Rate', key: 'dailyRate', width: 12 },
+      { header: 'Total Charge', key: 'totalCharge', width: 14 },
+    ];
+
+    ettSheet.getRow(1).eachCell((cell) => {
+      cell.style = headerStyle as ExcelJS.Style;
+    });
+
+    for (const row of extendedTankTime) {
+      ettSheet.addRow(row);
+    }
+
+    ['dailyRate', 'totalCharge'].forEach((key) => {
+      ettSheet.getColumn(key).numFmt = '$#,##0.00';
+    });
   }
 
   // Write to buffer

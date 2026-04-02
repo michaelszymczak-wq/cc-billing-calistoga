@@ -309,6 +309,8 @@ export interface BillingResponse {
   bulkInventory: BulkBillingRow[];
   barrelInventory: BarrelBillingRow[];
   caseGoodsInventory: CaseGoodsBillingRow[];
+  extendedTankTime: ExtendedTankTimeRow[];
+  extendedTankTimeWarnings: ExtendedTankTimeWarning[];
   summary: {
     totalActions: number;
     totalBilled: number;
@@ -316,6 +318,7 @@ export interface BillingResponse {
     bulkLots: number;
     barrelOwners: number;
     caseGoodsLots: number;
+    extendedTankTimeLots: number;
   };
 }
 
@@ -416,6 +419,33 @@ export interface FruitIntakeApiItem {
   grower?: { _id: number; name: string };
 }
 
+// ─── Extended Tank Time ───
+
+export interface ExtendedTankTimeRow {
+  ownerCode: string;
+  lotCode: string;
+  color: string;
+  startActionType: string;
+  endActionType: string;
+  startDate: string;        // ISO date of start action
+  endDate: string;          // ISO date of end action
+  totalDays: number;
+  includedDays: number;     // grace period (default 16)
+  billableDays: number;     // max(0, totalDays - includedDays)
+  dailyRate: number;        // $/day (default 150)
+  totalCharge: number;      // billableDays * dailyRate
+}
+
+export interface ExtendedTankTimeWarning {
+  ownerCode: string;
+  lotCode: string;
+  color: string;
+  startActionType: string;
+  startDate: string;
+  daysInTank: number;
+  message: string;
+}
+
 // ─── Consumables (shared costs distributed by fruit tonnage) ───
 
 export interface Consumable {
@@ -473,6 +503,8 @@ export interface AppSettings {
   billableAddOns: BillableAddOn[];
   consumables: Consumable[];
   activeCustomerStorageMonths: number[];
+  extendedTankTimeRate: number;       // $/day (default 150)
+  extendedTankTimeGraceDays: number;  // included days (default 16)
 }
 
 // ─── SSE Progress ───
@@ -516,6 +548,7 @@ export interface QBCustomerSummary {
     addOns: { items: QBLineItem[]; subtotal: number };
     consumables: { items: QBLineItem[]; subtotal: number };
     caseGoods: { items: QBLineItem[]; subtotal: number };
+    extendedTankTime: { items: QBLineItem[]; subtotal: number };
   };
   total: number;
 }

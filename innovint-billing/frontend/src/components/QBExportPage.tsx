@@ -11,7 +11,7 @@ const MONTHS = [
 ];
 
 const SOURCE_KEYS: (keyof EnabledSources)[] = [
-  'actions', 'barrel', 'bulk', 'fruitIntake', 'addOns', 'consumables', 'caseGoods',
+  'actions', 'barrel', 'bulk', 'fruitIntake', 'addOns', 'consumables', 'caseGoods', 'extendedTankTime',
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -22,6 +22,7 @@ const SOURCE_LABELS: Record<string, string> = {
   addOns: 'Add-Ons',
   consumables: 'Consumables',
   caseGoods: 'Case Goods',
+  extendedTankTime: 'Tank Time',
 };
 
 interface QBExportPageProps {
@@ -36,7 +37,7 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
   const [includeDeposits, setIncludeDeposits] = useState(false);
   const [enabledSources, setEnabledSources] = useState<EnabledSources>({
     actions: true, barrel: true, bulk: true, fruitIntake: true,
-    addOns: true, consumables: true, caseGoods: true,
+    addOns: true, consumables: true, caseGoods: true, extendedTankTime: true,
   });
   const [preview, setPreview] = useState<QBPreviewResponse | null>(null);
   const [expandedOwner, setExpandedOwner] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
   const hasSession = !!(billingState?.sessionId && billingState.results);
 
   // Sources that require a billing session
-  const SESSION_SOURCES: (keyof EnabledSources)[] = ['actions', 'barrel', 'bulk', 'caseGoods'];
+  const SESSION_SOURCES: (keyof EnabledSources)[] = ['actions', 'barrel', 'bulk', 'caseGoods', 'extendedTankTime'];
   const needsSession = SESSION_SOURCES.some(k => enabledSources[k]);
   const canGenerate = hasSession || !needsSession;
 
@@ -64,11 +65,11 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
   const toggleAll = () => {
     if (allEnabled) {
       // Uncheck all
-      setEnabledSources({ actions: false, barrel: false, bulk: false, fruitIntake: false, addOns: false, consumables: false, caseGoods: false });
+      setEnabledSources({ actions: false, barrel: false, bulk: false, fruitIntake: false, addOns: false, consumables: false, caseGoods: false, extendedTankTime: false });
       setIncludeDeposits(false);
     } else {
       // Check all
-      setEnabledSources({ actions: true, barrel: true, bulk: true, fruitIntake: true, addOns: true, consumables: true, caseGoods: true });
+      setEnabledSources({ actions: true, barrel: true, bulk: true, fruitIntake: true, addOns: true, consumables: true, caseGoods: true, extendedTankTime: true });
       setIncludeDeposits(true);
     }
   };
@@ -138,11 +139,12 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
       ...c.sources.addOns.items,
       ...c.sources.consumables.items,
       ...(c.sources.caseGoods?.items || []),
+      ...(c.sources.extendedTankTime?.items || []),
     ];
     if (allItems.length === 0) return null;
     return (
       <tr key={`${c.ownerCode}-detail`}>
-        <td colSpan={9} className="px-3 py-2 bg-gray-50">
+        <td colSpan={10} className="px-3 py-2 bg-gray-50">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-gray-500">
@@ -314,6 +316,7 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Add-Ons</th>
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Consumables</th>
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Case Goods</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">Tank Time</th>
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Total</th>
                 </tr>
               </thead>
@@ -335,6 +338,7 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
                       <td className="px-3 py-2 text-right">{c.sources.addOns.subtotal ? fmt(c.sources.addOns.subtotal) : '-'}</td>
                       <td className="px-3 py-2 text-right">{c.sources.consumables.subtotal ? fmt(c.sources.consumables.subtotal) : '-'}</td>
                       <td className="px-3 py-2 text-right">{c.sources.caseGoods?.subtotal ? fmt(c.sources.caseGoods.subtotal) : '-'}</td>
+                      <td className="px-3 py-2 text-right">{c.sources.extendedTankTime?.subtotal ? fmt(c.sources.extendedTankTime.subtotal) : '-'}</td>
                       <td className="px-3 py-2 text-right font-bold">{fmt(c.total)}</td>
                     </tr>
                     {expandedOwner === c.ownerCode && renderDetail(c)}
@@ -365,6 +369,9 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
                   <td className="px-3 py-2 text-right">
                     {fmt(preview.customers.reduce((s, c) => s + (c.sources.caseGoods?.subtotal || 0), 0))}
                   </td>
+                  <td className="px-3 py-2 text-right">
+                    {fmt(preview.customers.reduce((s, c) => s + (c.sources.extendedTankTime?.subtotal || 0), 0))}
+                  </td>
                   <td className="px-3 py-2 text-right">{fmt(preview.grandTotal)}</td>
                 </tr>
               </tfoot>
@@ -380,7 +387,7 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
                   <span className="font-bold text-sm">{fmt(c.total)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-1 text-xs text-gray-600">
-                  {(['actions', 'barrel', 'bulk', 'fruitIntake', 'addOns', 'consumables', 'caseGoods'] as const).map(key => {
+                  {(['actions', 'barrel', 'bulk', 'fruitIntake', 'addOns', 'consumables', 'caseGoods', 'extendedTankTime'] as const).map(key => {
                     const sub = c.sources[key]?.subtotal || 0;
                     return sub > 0 ? <div key={key}>{SOURCE_LABELS[key]}: {fmt(sub)}</div> : null;
                   })}

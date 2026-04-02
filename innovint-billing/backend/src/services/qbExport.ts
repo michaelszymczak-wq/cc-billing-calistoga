@@ -5,6 +5,7 @@ import {
   BulkBillingRow,
   CaseGoodsBillingRow,
   Consumable,
+  ExtendedTankTimeRow,
   FruitCustomerOverride,
   FruitIntakeRecord,
   QBCustomerSummary,
@@ -101,6 +102,8 @@ export function mapToQuickBooksItem(
       return { item: 'Case Goods', description: 'Case Goods Pallet Storage' };
     case 'CONSUMABLE':
       return { item: description, description: 'Consumable: ' + description };
+    case 'EXTENDED_TANK_TIME':
+      return { item: 'Tank Time', description: 'Extended Tank Time' };
     default:
       return { item: 'Addl Winework', description: description || 'Miscellaneous' };
   }
@@ -173,6 +176,7 @@ type EnabledSources = {
   addOns: boolean;
   consumables: boolean;
   caseGoods: boolean;
+  extendedTankTime: boolean;
 };
 
 export function buildPreview(
@@ -190,7 +194,8 @@ export function buildPreview(
   customerOverrides: FruitCustomerOverride[] = [],
   defaultContractMonths: number = 12,
   includeDeposits: boolean = false,
-  caseGoodsInv: CaseGoodsBillingRow[] = []
+  caseGoodsInv: CaseGoodsBillingRow[] = [],
+  extendedTankTimeRows: ExtendedTankTimeRow[] = []
 ): QBPreviewResponse {
   const billingDate = getLastDayOfMonth(month, year);
   const excludedSet = new Set(excluded.map(c => c.toUpperCase()));
@@ -206,6 +211,7 @@ export function buildPreview(
   if (enabledSources.fruitIntake) fruitRecords.forEach(f => allOwners.add(f.ownerCode));
   if (enabledSources.addOns) addOns.forEach(a => allOwners.add(a.ownerCode));
   if (enabledSources.caseGoods) caseGoodsInv.forEach(cg => allOwners.add(cg.ownerCode));
+  if (enabledSources.extendedTankTime) extendedTankTimeRows.forEach(ett => allOwners.add(ett.ownerCode));
   if (includeDeposits) {
     for (const o of customerOverrides) {
       if (o.deposit > 0) allOwners.add(o.ownerCode);
@@ -227,6 +233,7 @@ export function buildPreview(
     addOns: { items: [], subtotal: 0 },
     consumables: { items: [], subtotal: 0 },
     caseGoods: { items: [], subtotal: 0 },
+    extendedTankTime: { items: [], subtotal: 0 },
   });
 
   const customers: QBCustomerSummary[] = [];
@@ -447,15 +454,33 @@ export function buildPreview(
       sources.caseGoods.subtotal = round2(sources.caseGoods.subtotal);
     }
 
+    // ── Extended Tank Time ──
+    if (enabledSources.extendedTankTime) {
+      const ownerTankTime = extendedTankTimeRows.filter(ett => ett.ownerCode === ownerCode);
+      for (const ett of ownerTankTime) {
+        const mapped = mapToQuickBooksItem('EXTENDED_TANK_TIME', '');
+        const lineItem = makeLineItem(
+          customerJob, billingDate, mapped.item,
+          `${mapped.description}: ${ett.lotCode} (${ett.billableDays} days)`,
+          ett.billableDays, ett.dailyRate
+        );
+        lineItem.amount = round2(ett.totalCharge);
+        sources.extendedTankTime.items.push(lineItem);
+        sources.extendedTankTime.subtotal += lineItem.amount;
+      }
+      sources.extendedTankTime.subtotal = round2(sources.extendedTankTime.subtotal);
+    }
+
     const total = round2(
       sources.actions.subtotal + sources.barrel.subtotal + sources.bulk.subtotal +
       sources.fruitIntake.subtotal + sources.addOns.subtotal + sources.consumables.subtotal +
-      sources.caseGoods.subtotal
+      sources.caseGoods.subtotal + sources.extendedTankTime.subtotal
     );
 
     if (total > 0 || sources.actions.items.length + sources.barrel.items.length +
         sources.bulk.items.length + sources.fruitIntake.items.length + sources.addOns.items.length +
-        sources.consumables.items.length + sources.caseGoods.items.length > 0) {
+        sources.consumables.items.length + sources.caseGoods.items.length +
+        sources.extendedTankTime.items.length > 0) {
       customers.push({ ownerCode, sources, total });
     }
   }
@@ -464,7 +489,8 @@ export function buildPreview(
   const lineItemCount = customers.reduce((sum, c) => {
     return sum + c.sources.actions.items.length + c.sources.barrel.items.length +
       c.sources.bulk.items.length + c.sources.fruitIntake.items.length + c.sources.addOns.items.length +
-      c.sources.consumables.items.length + c.sources.caseGoods.items.length;
+      c.sources.consumables.items.length + c.sources.caseGoods.items.length +
+      c.sources.extendedTankTime.items.length;
   }, 0);
 
   return { customers, grandTotal, lineItemCount, billingDate };
@@ -496,6 +522,7 @@ export function generateCSV(preview: QBPreviewResponse): string {
       ...customer.sources.addOns.items,
       ...customer.sources.consumables.items,
       ...customer.sources.caseGoods.items,
+      ...customer.sources.extendedTankTime.items,
     ];
     for (const item of allItems) {
       lines.push([

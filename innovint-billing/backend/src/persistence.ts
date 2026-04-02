@@ -38,6 +38,8 @@ export function defaultSettings(): AppSettings {
     billableAddOns: [],
     consumables: [],
     activeCustomerStorageMonths: [1, 2, 3, 4, 5, 6],
+    extendedTankTimeRate: 150,
+    extendedTankTimeGraceDays: 16,
     fruitIntakeSettings: {
       actionTypeKey: 'FRUITINTAKE',
       vintageLookback: 3,
@@ -128,6 +130,8 @@ function mergeWithDefaults(parsed: Record<string, unknown>): AppSettings {
     billableAddOns: Array.isArray(parsed.billableAddOns) ? parsed.billableAddOns : defaults.billableAddOns,
     consumables: Array.isArray(parsed.consumables) ? parsed.consumables : defaults.consumables,
     activeCustomerStorageMonths: Array.isArray(parsed.activeCustomerStorageMonths) ? parsed.activeCustomerStorageMonths as number[] : defaults.activeCustomerStorageMonths,
+    extendedTankTimeRate: (parsed.extendedTankTimeRate as number) ?? defaults.extendedTankTimeRate,
+    extendedTankTimeGraceDays: (parsed.extendedTankTimeGraceDays as number) ?? defaults.extendedTankTimeGraceDays,
   };
 }
 

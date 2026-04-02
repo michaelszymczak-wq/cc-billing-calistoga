@@ -197,6 +197,7 @@ export interface QBCustomerSummary {
     addOns: { items: QBLineItem[]; subtotal: number };
     consumables: { items: QBLineItem[]; subtotal: number };
     caseGoods: { items: QBLineItem[]; subtotal: number };
+    extendedTankTime: { items: QBLineItem[]; subtotal: number };
   };
   total: number;
 }
@@ -225,6 +226,8 @@ export interface AppConfig {
   fruitIntakeSettings: FruitIntakeSettings;
   billableAddOns: BillableAddOn[];
   activeCustomerStorageMonths: number[];
+  extendedTankTimeRate: number;
+  extendedTankTimeGraceDays: number;
 }
 
 export interface ActionRow {
@@ -281,12 +284,39 @@ export interface CaseGoodsBillingRow {
   totalCost: number;
 }
 
+export interface ExtendedTankTimeRow {
+  ownerCode: string;
+  lotCode: string;
+  color: string;
+  startActionType: string;
+  endActionType: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  includedDays: number;
+  billableDays: number;
+  dailyRate: number;
+  totalCharge: number;
+}
+
+export interface ExtendedTankTimeWarning {
+  ownerCode: string;
+  lotCode: string;
+  color: string;
+  startActionType: string;
+  startDate: string;
+  daysInTank: number;
+  message: string;
+}
+
 export interface BillingResults {
   actions: ActionRow[];
   auditRows: AuditRow[];
   bulkInventory: BulkBillingRow[];
   barrelInventory: BarrelBillingRow[];
   caseGoodsInventory: CaseGoodsBillingRow[];
+  extendedTankTime: ExtendedTankTimeRow[];
+  extendedTankTimeWarnings: ExtendedTankTimeWarning[];
   summary: {
     totalActions: number;
     totalBilled: number;
@@ -294,6 +324,7 @@ export interface BillingResults {
     bulkLots: number;
     barrelOwners: number;
     caseGoodsLots: number;
+    extendedTankTimeLots: number;
   };
 }
 
@@ -327,6 +358,8 @@ export async function saveSettings(data: {
   tankStorageRate?: number;
   caseGoodsStorageRate?: number;
   activeCustomerStorageMonths?: number[];
+  extendedTankTimeRate?: number;
+  extendedTankTimeGraceDays?: number;
 }): Promise<{ success: boolean }> {
   const res = await apiFetch(`${BASE_URL}/settings`, {
     method: 'POST',
@@ -618,6 +651,7 @@ export interface EnabledSources {
   addOns: boolean;
   consumables: boolean;
   caseGoods: boolean;
+  extendedTankTime: boolean;
 }
 
 export async function getQBPreview(params: {

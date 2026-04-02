@@ -12,6 +12,7 @@ import AuditTable from './AuditTable';
 import BulkTable from './BulkTable';
 import BarrelTable from './BarrelTable';
 import CaseGoodsTable from './CaseGoodsTable';
+import TankTimeTable from './TankTimeTable';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -26,7 +27,7 @@ export interface BillingRunState {
   running: boolean;
   progress: number;
   logs: Array<{ step: string; message: string; pct: number }>;
-  stepStatus: { actions: StepState; rates: StepState; bulk: StepState; barrels: StepState; casegoods: StepState };
+  stepStatus: { actions: StepState; rates: StepState; bulk: StepState; barrels: StepState; casegoods: StepState; tanktime: StepState };
   results: BillingResults | null;
   sessionId: string;
 }
@@ -38,7 +39,7 @@ export function defaultBillingRunState(month?: string, year?: number): BillingRu
     running: false,
     progress: 0,
     logs: [],
-    stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending', casegoods: 'pending' },
+    stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending', casegoods: 'pending', tanktime: 'pending' },
     results: null,
     sessionId: '',
   };
@@ -85,13 +86,13 @@ export default function BillingControls({
       logs: [],
       results: null,
       sessionId: '',
-      stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending', casegoods: 'pending' },
+      stepStatus: { actions: 'pending', rates: 'pending', bulk: 'pending', barrels: 'pending', casegoods: 'pending', tanktime: 'pending' },
     }));
 
     saveBillingPrefs({ lastUsedMonth: month, lastUsedYear: year }).catch(() => {});
 
     try {
-      const steps = ['actions', 'bulk', 'barrels', 'casegoods'];
+      const steps = ['actions', 'bulk', 'barrels', 'casegoods', 'tanktime'];
 
       const { sessionId: sid } = await runBilling({
         month,
@@ -121,18 +122,22 @@ export default function BillingControls({
               next.barrels = event.pct >= 95 ? 'done' : 'running';
             } else if (event.step === 'casegoods') {
               next.casegoods = event.pct >= 100 ? 'done' : 'running';
+            } else if (event.step === 'tanktime') {
+              next.tanktime = 'running';
             } else if (event.step === 'complete') {
               next.actions = 'done';
               next.rates = 'done';
               next.bulk = 'done';
               next.barrels = 'done';
               next.casegoods = 'done';
+              next.tanktime = 'done';
             } else if (event.step === 'error') {
               if (next.actions === 'running') next.actions = 'error';
               if (next.rates === 'running') next.rates = 'error';
               if (next.bulk === 'running') next.bulk = 'error';
               if (next.barrels === 'running') next.barrels = 'error';
               if (next.casegoods === 'running') next.casegoods = 'error';
+              if (next.tanktime === 'running') next.tanktime = 'error';
             }
 
             return { ...prev, logs: nextLogs, progress: nextProgress, stepStatus: next };
@@ -372,13 +377,14 @@ export default function BillingControls({
       {/* Results */}
       {results && (
         <div className="space-y-6">
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-7 gap-4">
             <SummaryCard label="Total Actions" value={results.summary.totalActions} />
             <SummaryCard label="Total Billed" value={`$${results.summary.totalBilled.toFixed(2)}`} />
             <SummaryCard label="Unmatched" value={results.summary.auditCount} color="amber" />
             <SummaryCard label="BULK Lots" value={results.summary.bulkLots} />
             <SummaryCard label="Barrel Owners" value={results.summary.barrelOwners} />
             <SummaryCard label="Case Goods" value={results.summary.caseGoodsLots ?? 0} />
+            <SummaryCard label="Tank Time" value={results.summary.extendedTankTimeLots ?? 0} />
           </div>
 
           <button
@@ -415,6 +421,17 @@ export default function BillingControls({
                 content: <CaseGoodsTable rows={results.caseGoodsInventory || []} />,
               },
               {
+                id: 'tanktime',
+                label: 'Tank Time',
+                badge: (results.extendedTankTime || []).length + (results.extendedTankTimeWarnings || []).length,
+                content: (
+                  <TankTimeTable
+                    rows={results.extendedTankTime || []}
+                    warnings={results.extendedTankTimeWarnings || []}
+                  />
+                ),
+              },
+              {
                 id: 'audit',
                 label: 'Audit',
                 badge: results.auditRows.length,
@@ -438,6 +455,7 @@ export default function BillingControls({
                     <SummaryCard label="BULK Lots" value={results.summary.bulkLots} />
                     <SummaryCard label="Barrel Owners" value={results.summary.barrelOwners} />
                     <SummaryCard label="Case Goods" value={results.summary.caseGoodsLots ?? 0} />
+                    <SummaryCard label="Tank Time Lots" value={results.summary.extendedTankTimeLots ?? 0} />
                   </div>
                 ),
               },

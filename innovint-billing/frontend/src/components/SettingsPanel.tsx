@@ -35,6 +35,9 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
   const [fruitStatus, setFruitStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [activeStorageMonths, setActiveStorageMonths] = useState<number[]>([1, 2, 3, 4, 5, 6]);
   const [storageMonthStatus, setStorageMonthStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [tankTimeRate, setTankTimeRate] = useState<number>(150);
+  const [tankTimeGraceDays, setTankTimeGraceDays] = useState<number>(16);
+  const [tankTimeStatus, setTankTimeStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     getSettings()
@@ -50,6 +53,8 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
         if (s.caseGoodsStorageRate !== undefined) setCaseGoodsStorageRate(s.caseGoodsStorageRate);
         if (s.fruitIntakeSettings) setFruitSettings(s.fruitIntakeSettings);
         if (s.activeCustomerStorageMonths) setActiveStorageMonths(s.activeCustomerStorageMonths);
+        if (s.extendedTankTimeRate !== undefined) setTankTimeRate(s.extendedTankTimeRate);
+        if (s.extendedTankTimeGraceDays !== undefined) setTankTimeGraceDays(s.extendedTankTimeGraceDays);
       })
       .catch(() => {
         // Settings not found yet
@@ -202,6 +207,58 @@ export default function SettingsPanel({ onSettingsSaved }: SettingsPanelProps) {
           >
             {status === 'saving' ? 'Saving...' : 'Save Storage Rates'}
           </button>
+        </div>
+      </div>
+
+      {/* Extended Tank Time Settings */}
+      <div className="mt-8 pt-8 border-t border-gray-200">
+        <h3 className="text-base font-semibold mb-2">Extended Tank Time</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          After fruit processing, customers receive a grace period in tank. Additional days are billed at the daily rate.
+        </p>
+        <div className="space-y-3 max-w-md">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Daily Rate ($/day)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={tankTimeRate}
+                onChange={(e) => setTankTimeRate(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Included Days (grace)</label>
+              <input
+                type="number"
+                step="1"
+                min={0}
+                value={tankTimeGraceDays}
+                onChange={(e) => setTankTimeGraceDays(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              setTankTimeStatus('saving');
+              try {
+                await saveSettings({ extendedTankTimeRate: tankTimeRate, extendedTankTimeGraceDays: tankTimeGraceDays });
+                setTankTimeStatus('success');
+                setTimeout(() => setTankTimeStatus('idle'), 2000);
+              } catch {
+                setTankTimeStatus('error');
+              }
+            }}
+            disabled={tankTimeStatus === 'saving'}
+            className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50 transition-colors"
+          >
+            {tankTimeStatus === 'saving' ? 'Saving...' : 'Save Tank Time Settings'}
+          </button>
+          {tankTimeStatus === 'success' && <p className="text-sm text-green-600">Tank time settings saved.</p>}
+          {tankTimeStatus === 'error' && <p className="text-sm text-red-600">Failed to save tank time settings.</p>}
         </div>
       </div>
 

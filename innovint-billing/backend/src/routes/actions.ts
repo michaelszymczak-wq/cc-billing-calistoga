@@ -6,6 +6,7 @@ import { applyRateMapping } from '../services/rateMapper';
 import { runBulkInventory, runCaseGoodsInventory } from '../services/bulkInventory';
 import { runBarrelInventory } from '../services/barrelInventory';
 import { generateExcel } from '../services/excelExport';
+import { runExtendedTankTime } from '../services/extendedTankTime';
 import { loadSettings, saveSessionResult, loadSessionResult } from '../persistence';
 
 const router = Router();
@@ -189,7 +190,8 @@ router.get('/export-excel', async (req: Request, res: Response) => {
       session.billingResult.barrelInventory,
       fruitIntakeRecords,
       billingMonth,
-      session.billingResult.caseGoodsInventory || []
+      session.billingResult.caseGoodsInventory || [],
+      session.billingResult.extendedTankTime || []
     );
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -215,7 +217,9 @@ async function runBillingPipeline(
     bulkInventory: [],
     barrelInventory: [],
     caseGoodsInventory: [],
-    summary: { totalActions: 0, totalBilled: 0, auditCount: 0, bulkLots: 0, barrelOwners: 0, caseGoodsLots: 0 },
+    extendedTankTime: [],
+    extendedTankTimeWarnings: [],
+    summary: { totalActions: 0, totalBilled: 0, auditCount: 0, bulkLots: 0, barrelOwners: 0, caseGoodsLots: 0, extendedTankTimeLots: 0 },
   };
 
   const onProgress = (event: ProgressEvent) => emitProgress(sessionId, event);
@@ -389,6 +393,34 @@ async function runBillingPipeline(
         onProgress({
           step: 'casegoods',
           message: `WARNING: Case goods inventory step failed: ${err instanceof Error ? err.message : 'Unknown error'}. Step skipped.`,
+          pct: -1,
+        });
+      }
+    }
+
+    // Step 6: Extended Tank Time
+    if (steps.includes('tanktime')) {
+      try {
+        onProgress({ step: 'tanktime', message: 'Starting extended tank time billing...', pct: 85 });
+        const tankSettings = await loadSettings();
+        const customerMap: Record<string, string> = {};
+        for (const c of tankSettings.customers || []) {
+          if (c.ownerName && c.code) customerMap[c.ownerName] = c.code;
+        }
+        const { rows: tankRows, warnings: tankWarnings } = await runExtendedTankTime(
+          wineryId, token, month, year,
+          tankSettings.extendedTankTimeGraceDays ?? 16,
+          tankSettings.extendedTankTimeRate ?? 150,
+          customerMap,
+          onProgress
+        );
+        result.extendedTankTime = tankRows;
+        result.extendedTankTimeWarnings = tankWarnings;
+        result.summary.extendedTankTimeLots = tankRows.length;
+      } catch (err) {
+        onProgress({
+          step: 'tanktime',
+          message: `WARNING: Extended tank time step failed: ${err instanceof Error ? err.message : 'Unknown error'}. Step skipped.`,
           pct: -1,
         });
       }
