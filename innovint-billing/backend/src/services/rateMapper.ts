@@ -366,6 +366,7 @@ export function applyRateMapping(
   const minDollars: number[] = [];
   const freeFirstFlags: boolean[] = [];
   const matchedRules: Array<RateRule | null> = [];
+  const originalQuantities: number[] = []; // preserve real volume before flat-fee override
 
   const updatedRows = rows.map((row, idx) => {
     const result = findRate(
@@ -403,6 +404,7 @@ export function applyRateMapping(
     minDollars[idx] = result.minDollar;
     freeFirstFlags[idx] = result.freeFirstPerLot;
     matchedRules[idx] = result.matchedRule || null;
+    originalQuantities[idx] = row.quantity || 0; // real volume before billing-unit override
 
     // Set quantity to the effective qty used for billing
     let displayQty = row.quantity;
@@ -571,15 +573,16 @@ export function applyRateMapping(
           runIndices.push(...dateToIndices.get(date)!);
         }
 
-        // Total cases across this run
-        const totalCases = runIndices.reduce((sum, i) => sum + (updatedRows[i].quantity || 0), 0);
+        // Total volume (cases) across this run — use original quantities (real volume),
+        // not the billing-unit overridden quantity (which is 1 for flat fee)
+        const totalCases = runIndices.reduce((sum, i) => sum + (originalQuantities[i] || 0), 0);
 
-        // Distribute runCost proportionally by quantity
+        // Distribute runCost proportionally by volume
         if (totalCases > 0) {
           let distributed = 0;
           for (let k = 0; k < runIndices.length; k++) {
             const i = runIndices[k];
-            const qty = updatedRows[i].quantity || 0;
+            const qty = originalQuantities[i] || 0;
             if (k === runIndices.length - 1) {
               // Last row gets remainder to avoid rounding drift
               const share = Math.round((runCost - distributed) * 100) / 100;

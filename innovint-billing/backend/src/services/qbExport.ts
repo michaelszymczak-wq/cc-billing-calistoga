@@ -79,9 +79,9 @@ export function mapToQuickBooksItem(
     case 'BULK':
       return { item: 'Bulk', description: 'Full Barrel Storage' };
     case 'BARREL':
-      return { item: 'Empty', description: 'Empty Barrel Storage' };
+      return { item: 'Empty Barrel Storage', description: 'Empty Barrel Storage' };
     case 'PUNCHEON':
-      return { item: 'Empty', description: 'Empty Puncheon Storage' };
+      return { item: 'Empty Puncheon Storage', description: 'Empty Puncheon Storage' };
     case 'TANK':
       return { item: 'Tank Storage', description: 'Tank Storage' };
     case 'STEAM':
@@ -100,6 +100,8 @@ export function mapToQuickBooksItem(
     }
     case 'CASE_GOODS':
       return { item: 'Case Goods', description: 'Case Goods Pallet Storage' };
+    case 'BOTTLE':
+      return { item: 'Bottling', description: description || 'Bottling' };
     case 'CONSUMABLE':
       return { item: description, description: 'Consumable: ' + description };
     case 'EXTENDED_TANK_TIME':
@@ -117,6 +119,7 @@ function getActionItemCode(row: ActionRow): string {
   if (actionType === 'DRAIN_AND_PRESS') return 'PRESS';
   if (actionType === 'CUSTOM' && /steam/i.test(row.analysisOrNotes)) return 'STEAM';
   if (actionType === 'CUSTOM' && /tasting/i.test(row.analysisOrNotes)) return 'TASTING';
+  if (actionType === 'BOTTLE') return 'BOTTLE';
   const notes = (row.analysisOrNotes || '').toLowerCase();
   const label = (row.matchedRuleLabel || '').toLowerCase();
   if (/billable/i.test(notes) || /billable/i.test(label)) return 'LABOR';
@@ -126,6 +129,10 @@ function getActionItemCode(row: ActionRow): string {
 }
 
 function getActionDescription(row: ActionRow): string {
+  const actionType = (row.rawActionType || row.actionType || '').toUpperCase();
+  if (actionType === 'BOTTLE') {
+    return row.lotCodes || row.analysisOrNotes || 'Bottling';
+  }
   return row.analysisOrNotes || row.matchedRuleLabel || row.actionType;
 }
 
