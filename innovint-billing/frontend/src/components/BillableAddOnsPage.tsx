@@ -26,13 +26,7 @@ function todayStr(): string {
 
 
 export default function BillableAddOnsPage({ rateRules, customers, role }: BillableAddOnsPageProps) {
-  const sortedCustomers = [...customers].filter(c => c.code).sort((a, b) =>
-    (a.displayName || a.ownerName || a.code).localeCompare(b.displayName || b.ownerName || b.code)
-  );
-  const nameFor = (code: string) => {
-    const c = customers.find(c => c.code === code);
-    return c?.displayName || c?.ownerName || code;
-  };
+  const ownerNames = [...new Set(customers.map(c => c.ownerName).filter(Boolean))].sort();
   const [addOns, setAddOns] = useState<BillableAddOn[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -184,8 +178,8 @@ export default function BillableAddOnsPage({ rateRules, customers, role }: Billa
                   className="w-full border rounded px-3 py-2 text-sm"
                 >
                   <option value="">-- Select --</option>
-                  {sortedCustomers.map((c) => (
-                    <option key={c.code} value={c.code}>{c.displayName || c.ownerName || c.code}</option>
+                  {ownerNames.map((name) => (
+                    <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
               </div>
@@ -295,8 +289,8 @@ export default function BillableAddOnsPage({ rateRules, customers, role }: Billa
                         className="border rounded px-2 py-1 text-sm w-48"
                       >
                         <option value="">-- Select --</option>
-                        {sortedCustomers.map((c) => (
-                          <option key={c.code} value={c.code}>{c.displayName || c.ownerName || c.code}</option>
+                        {ownerNames.map((name) => (
+                          <option key={name} value={name}>{name}</option>
                         ))}
                       </select>
                     </td>
@@ -349,7 +343,7 @@ export default function BillableAddOnsPage({ rateRules, customers, role }: Billa
                     <td className={tdClass}>{a.date}</td>
                     <td className={tdClass}>{a.rateRuleLabel}</td>
                     <td className={tdClass}>{a.quantity}</td>
-                    <td className={tdClass}>{nameFor(a.ownerCode)}</td>
+                    <td className={tdClass}>{a.ownerCode}</td>
                     <td className={tdClass}>${a.rate.toFixed(2)}</td>
                     <td className={tdClass}>{a.billingUnit}</td>
                     <td className={tdClass + ' font-medium'}>${a.totalCost.toFixed(2)}</td>
@@ -383,7 +377,7 @@ export default function BillableAddOnsPage({ rateRules, customers, role }: Billa
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{a.rateRuleLabel}</p>
-                    <p className="text-xs text-gray-500">{a.date} &middot; {nameFor(a.ownerCode)}</p>
+                    <p className="text-xs text-gray-500">{a.date} &middot; {a.ownerCode}</p>
                   </div>
                   <div className="text-right ml-3 flex-shrink-0">
                     <p className="text-sm font-bold text-gray-900">${a.totalCost.toFixed(2)}</p>
