@@ -243,7 +243,7 @@ export default function App() {
         {page === 'add-ons' && config && (
           <BillableAddOnsPage
             rateRules={config.rateRules}
-            ownerCodes={(config.customers || []).map(c => c.code).filter(Boolean).sort()}
+            customers={config.customers || []}
             role={role}
           />
         )}
