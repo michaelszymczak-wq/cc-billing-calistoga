@@ -428,6 +428,18 @@ export default function BillingControls({
                   <TankTimeTable
                     rows={results.extendedTankTime || []}
                     warnings={results.extendedTankTimeWarnings || []}
+                    sessionId={sessionId}
+                    onRowUpdate={(index, updatedRow) => {
+                      onBillingStateChange((prev) => {
+                        if (!prev.results) return prev;
+                        const newRows = [...prev.results.extendedTankTime];
+                        newRows[index] = updatedRow;
+                        return {
+                          ...prev,
+                          results: { ...prev.results, extendedTankTime: newRows },
+                        };
+                      });
+                    }}
                   />
                 ),
               },

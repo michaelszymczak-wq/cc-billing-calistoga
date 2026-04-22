@@ -1,14 +1,48 @@
-import React from 'react';
-import { ExtendedTankTimeRow, ExtendedTankTimeWarning } from '../api/client';
+import React, { useState } from 'react';
+import { ExtendedTankTimeRow, ExtendedTankTimeWarning, updateTankTimeRow } from '../api/client';
 
 interface TankTimeTableProps {
   rows: ExtendedTankTimeRow[];
   warnings: ExtendedTankTimeWarning[];
+  sessionId: string;
+  onRowUpdate: (index: number, updatedRow: ExtendedTankTimeRow) => void;
 }
 
-export default function TankTimeTable({ rows, warnings }: TankTimeTableProps) {
+export default function TankTimeTable({ rows, warnings, sessionId, onRowUpdate }: TankTimeTableProps) {
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const totalCharge = rows.reduce((sum, r) => sum + r.totalCharge, 0);
+
+  const [editingCell, setEditingCell] = useState<{ index: number; field: 'dailyRate' | 'quantity' } | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const startEdit = (index: number, field: 'dailyRate' | 'quantity', currentValue: number) => {
+    setEditingCell({ index, field });
+    setEditValue(currentValue.toString());
+  };
+
+  const commitEdit = async () => {
+    if (!editingCell) return;
+    const numVal = parseFloat(editValue);
+    if (isNaN(numVal) || numVal < 0) {
+      setEditingCell(null);
+      return;
+    }
+    const row = rows[editingCell.index];
+    const newRate = editingCell.field === 'dailyRate' ? numVal : row.dailyRate;
+    const newQty = editingCell.field === 'quantity' ? numVal : row.quantity;
+
+    try {
+      const { row: updatedRow } = await updateTankTimeRow(sessionId, editingCell.index, newRate, newQty);
+      onRowUpdate(editingCell.index, updatedRow);
+    } catch {
+      // silently fail
+    }
+    setEditingCell(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingCell(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -44,7 +78,9 @@ export default function TankTimeTable({ rows, warnings }: TankTimeTableProps) {
               <th className="px-3 py-2 text-right font-medium text-gray-600">Total Days</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">Included</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">Billable Days</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-600">Rate/Day</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">Qty</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">Unit</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">Rate/Unit/Day</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">Total</th>
             </tr>
           </thead>
@@ -61,13 +97,55 @@ export default function TankTimeTable({ rows, warnings }: TankTimeTableProps) {
                 <td className="px-3 py-1.5 text-right">{row.totalDays}</td>
                 <td className="px-3 py-1.5 text-right">{row.includedDays}</td>
                 <td className="px-3 py-1.5 text-right font-medium">{row.billableDays}</td>
-                <td className="px-3 py-1.5 text-right">{fmt(row.dailyRate)}</td>
+                <td className="px-3 py-1.5 text-right">
+                  {editingCell?.index === i && editingCell.field === 'quantity' ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                      autoFocus
+                      className="w-20 px-1 py-0.5 border border-violet-400 rounded text-xs text-right font-mono"
+                    />
+                  ) : (
+                    <span
+                      onClick={() => startEdit(i, 'quantity', row.quantity)}
+                      className="cursor-pointer hover:text-violet-600 hover:underline"
+                    >
+                      {row.quantity?.toFixed(2) ?? '1.00'}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-1.5 text-xs">{row.unit || '-'}</td>
+                <td className="px-3 py-1.5 text-right">
+                  {editingCell?.index === i && editingCell.field === 'dailyRate' ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                      autoFocus
+                      className="w-20 px-1 py-0.5 border border-violet-400 rounded text-xs text-right font-mono"
+                    />
+                  ) : (
+                    <span
+                      onClick={() => startEdit(i, 'dailyRate', row.dailyRate)}
+                      className="cursor-pointer hover:text-violet-600 hover:underline"
+                    >
+                      {fmt(row.dailyRate)}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-1.5 text-right font-medium">{fmt(row.totalCharge)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-3 py-8 text-center text-gray-400">
+                <td colSpan={14} className="px-3 py-8 text-center text-gray-400">
                   No extended tank time charges for this period.
                 </td>
               </tr>
@@ -76,7 +154,7 @@ export default function TankTimeTable({ rows, warnings }: TankTimeTableProps) {
           {rows.length > 0 && (
             <tfoot>
               <tr className="bg-blue-50 font-bold border-t">
-                <td colSpan={11} className="px-3 py-2 text-right">Total</td>
+                <td colSpan={13} className="px-3 py-2 text-right">Total</td>
                 <td className="px-3 py-2 text-right">{fmt(totalCharge)}</td>
               </tr>
             </tfoot>

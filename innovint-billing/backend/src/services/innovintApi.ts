@@ -25,7 +25,7 @@ export async function fetchAllActions(
 
   while (offset < totalItems) {
     const url = new URL(`${BASE_URL}/wineries/${wineryId}/actions`);
-    url.searchParams.set('actionTypes', 'FILTER,CUSTOM,BOND_TO_BOND_TRANSFER_IN,BOND_TO_BOND_TRANSFER_OUT,BOTTLE,VOLUME_ADJUSTMENT,BOTTLING_EN_TIRAGE,RACK,RACK_AND_RETURN');
+    url.searchParams.set('actionTypes', 'FILTER,CUSTOM,BOND_TO_BOND_TRANSFER_IN,BOND_TO_BOND_TRANSFER_OUT,BOTTLE,VOLUME_ADJUSTMENT,BOTTLING_EN_TIRAGE,RACK,RACK_AND_RETURN,ANALYSIS');
     url.searchParams.set('startEffectiveAt', startDate);
     url.searchParams.set('endEffectiveAt', endDate);
     url.searchParams.set('includeWineryContents', 'True');

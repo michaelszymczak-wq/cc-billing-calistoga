@@ -131,6 +131,40 @@ interface StartActionRecord {
   ownerCode: string;
   colorGroup: WineColorGroup;
   startDate: string;
+  quantity: number;
+  unit: string;
+}
+
+function extractFillQuantity(action: ActionApiItem): number {
+  let total = 0;
+
+  // 1. Try fills[].volume.value (top-level fill volume)
+  if (action.actionData?.fills) {
+    for (const fill of action.actionData.fills) {
+      if (fill.volume?.value) {
+        total += fill.volume.value;
+      } else if (fill.vessels) {
+        // 2. Try fills[].vessels[].volume.value (nested vessel volumes)
+        for (const v of fill.vessels) {
+          if (v.volume?.value) total += v.volume.value;
+        }
+      }
+    }
+  }
+
+  // 3. Try wineryContents.volume (aggregate lot volume after action)
+  if (total === 0 && action.wineryContents?.volume?.value) {
+    total = action.wineryContents.volume.value;
+  }
+
+  // 4. Try involvedLots[].volume
+  if (total === 0 && action.actionData?.involvedLots) {
+    for (const il of action.actionData.involvedLots) {
+      if (il.volume?.value) total += il.volume.value;
+    }
+  }
+
+  return total > 0 ? total : 1;
 }
 
 export async function runExtendedTankTime(
@@ -139,7 +173,8 @@ export async function runExtendedTankTime(
   month: string,
   year: number,
   graceDays: number,
-  dailyRate: number,
+  ratePerTon: number,
+  ratePerGal: number,
   customerMap: Record<string, string>,
   onProgress: (event: ProgressEvent) => void
 ): Promise<{ rows: ExtendedTankTimeRow[]; warnings: ExtendedTankTimeWarning[] }> {
@@ -202,6 +237,8 @@ export async function runExtendedTankTime(
     if (lotCodes.length === 0) continue;
 
     const ownerCode = extractOwnerCode(action, customerMap);
+    const unit = colorGroup === 'red' ? 'ton' : 'gal';
+    const quantity = extractFillQuantity(action);
 
     startRecords.push({
       action,
@@ -209,6 +246,8 @@ export async function runExtendedTankTime(
       ownerCode,
       colorGroup,
       startDate: action.effectiveAt,
+      quantity,
+      unit,
     });
   }
 
@@ -261,6 +300,7 @@ export async function runExtendedTankTime(
       if (endDate < billingMonthStart || endDate > billingMonthEnd) continue;
 
       if (billableDays > 0) {
+        const rate = startRec.unit === 'ton' ? ratePerTon : ratePerGal;
         rows.push({
           ownerCode: startRec.ownerCode,
           lotCode,
@@ -272,8 +312,10 @@ export async function runExtendedTankTime(
           totalDays,
           includedDays: graceDays,
           billableDays,
-          dailyRate,
-          totalCharge: Math.round(billableDays * dailyRate * 100) / 100,
+          quantity: startRec.quantity,
+          unit: startRec.unit,
+          dailyRate: rate,
+          totalCharge: Math.round(billableDays * rate * startRec.quantity * 100) / 100,
         });
       }
     }

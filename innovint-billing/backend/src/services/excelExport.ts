@@ -348,7 +348,9 @@ export async function generateExcel(
       { header: 'Total Days', key: 'totalDays', width: 12 },
       { header: 'Included', key: 'includedDays', width: 10 },
       { header: 'Billable Days', key: 'billableDays', width: 14 },
-      { header: 'Daily Rate', key: 'dailyRate', width: 12 },
+      { header: 'Quantity', key: 'quantity', width: 12 },
+      { header: 'Unit', key: 'unit', width: 8 },
+      { header: 'Rate/Unit/Day', key: 'dailyRate', width: 14 },
       { header: 'Total Charge', key: 'totalCharge', width: 14 },
     ];
 

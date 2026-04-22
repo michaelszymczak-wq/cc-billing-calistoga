@@ -358,6 +358,34 @@ export function applyRateMapping(
   rules: RateRule[],
   allInclusiveLotCodes?: Set<string>
 ): { matched: ActionRow[]; auditRows: AuditRow[] } {
+  // Pre-process: expand panel ANALYSIS rows that have no matching panel rate
+  // into individual analysis rows so they can match individual rates instead.
+  const expandedRows: ActionRow[] = [];
+  for (const row of rows) {
+    if (row.panelAnalyses && row.panelAnalyses.length > 0) {
+      // Try matching the panel name first
+      const panelResult = findRate(
+        rules, row.actionType, row.analysisOrNotes, 0, row.analysisOrNotes,
+        row.analysisOrNotes, 0, undefined, undefined, undefined, undefined,
+        undefined, undefined, row.analysisSource
+      );
+      if (panelResult.matched) {
+        expandedRows.push(row);
+      } else {
+        // Panel didn't match — expand into individual analysis rows
+        for (const typeName of row.panelAnalyses) {
+          expandedRows.push({
+            ...row,
+            analysisOrNotes: typeName,
+            panelAnalyses: undefined,
+          });
+        }
+      }
+    } else {
+      expandedRows.push(row);
+    }
+  }
+
   const auditRows: AuditRow[] = [];
 
   // Track per-row metadata for post-processing
@@ -368,7 +396,7 @@ export function applyRateMapping(
   const matchedRules: Array<RateRule | null> = [];
   const originalQuantities: number[] = []; // preserve real volume before flat-fee override
 
-  const updatedRows = rows.map((row, idx) => {
+  const updatedRows = expandedRows.map((row, idx) => {
     const result = findRate(
       rules,
       row.actionType,

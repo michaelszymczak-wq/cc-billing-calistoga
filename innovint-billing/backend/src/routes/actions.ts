@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { ActionRow, AuditRow, BillingRequest, BillingResponse, ProgressEvent, RateRule, SessionData } from '../types';
+import { ActionRow, AuditRow, BillingRequest, BillingResponse, ExtendedTankTimeRow, ProgressEvent, RateRule, SessionData } from '../types';
 import { fetchAllActions, fetchInventorySnapshot, getMonthDateRange, getMonthIndex } from '../services/innovintApi';
 import { processActions, enrichCustomActionVolumes, resolveUnknownOwners } from '../services/actionProcessor';
 import { applyRateMapping } from '../services/rateMapper';
@@ -160,6 +160,44 @@ router.post('/rectify', async (req: Request, res: Response) => {
   saveSessionResult(sessionId, session).catch(() => {});
 
   res.json({ success: true });
+});
+
+// Update a tank time row inline (rate or quantity)
+router.post('/update-tank-time-row', async (req: Request, res: Response) => {
+  const { sessionId, rowIndex, dailyRate, quantity } = req.body as {
+    sessionId: string;
+    rowIndex: number;
+    dailyRate: number;
+    quantity: number;
+  };
+
+  let session = sessions.get(sessionId);
+  if (!session?.billingResult) {
+    const stored = await loadSessionResult(sessionId);
+    if (stored?.billingResult) {
+      sessions.set(sessionId, stored);
+      session = stored;
+    }
+  }
+  if (!session?.billingResult) {
+    res.status(404).json({ error: 'No results found for this session.' });
+    return;
+  }
+
+  const rows = session.billingResult.extendedTankTime;
+  if (rowIndex < 0 || rowIndex >= rows.length) {
+    res.status(400).json({ error: 'Invalid row index.' });
+    return;
+  }
+
+  const row = rows[rowIndex];
+  row.dailyRate = dailyRate;
+  row.quantity = quantity;
+  row.totalCharge = Math.round(row.billableDays * dailyRate * quantity * 100) / 100;
+
+  saveSessionResult(sessionId, session).catch(() => {});
+
+  res.json({ success: true, row });
 });
 
 // Excel export
@@ -410,7 +448,8 @@ async function runBillingPipeline(
         const { rows: tankRows, warnings: tankWarnings } = await runExtendedTankTime(
           wineryId, token, month, year,
           tankSettings.extendedTankTimeGraceDays ?? 16,
-          tankSettings.extendedTankTimeRate ?? 150,
+          tankSettings.extendedTankTimeRatePerTon ?? 150,
+          tankSettings.extendedTankTimeRatePerGal ?? 1,
           customerMap,
           onProgress
         );

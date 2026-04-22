@@ -369,39 +369,73 @@ function processAnalysisAction(action: ActionApiItem): ActionRow[] {
 
   const rows: ActionRow[] = [];
   const date = convertDateToPST(action.effectiveAt);
-  const fallbackOwnerCode = extractOwnerCode(action);
+  const ownerCode = extractOwnerCode(action);
   const analysisSource = action.actionData?.source || '';
+  const panelName = action.actionData?.panelName || '';
 
   const analyses = action.actionData?.analyses || [];
-  for (const analysis of analyses) {
-    const typeName = analysis.analysisType?.name || '';
 
-    // Skip brix and temperature analyses
-    if (/^(brix|temp(?:erature)?)$/i.test(typeName)) {
-      continue;
+  if (panelName) {
+    // Panel: one row per unique lot code (the whole panel is one price per lot)
+    // Collect individual analysis names per lot for fallback if panel has no rate match
+    const lotAnalyses = new Map<string, string[]>();
+    for (const analysis of analyses) {
+      const lotCode = analysis.lot?.lotCode || '';
+      const typeName = analysis.analysisType?.name || '';
+      if (/^(brix|temp(?:erature)?)$/i.test(typeName)) continue;
+      if (!lotAnalyses.has(lotCode)) lotAnalyses.set(lotCode, []);
+      lotAnalyses.get(lotCode)!.push(typeName);
     }
+    for (const [lotCode, individualNames] of lotAnalyses) {
+      rows.push({
+        actionType: 'ANALYSIS',
+        actionId: String(action._id),
+        lotCodes: lotCode,
+        performer: action.performedBy?.name || '',
+        date,
+        ownerCode,
+        analysisOrNotes: panelName,
+        hours: 0,
+        rate: 0,
+        setupFee: 0,
+        total: 0,
+        matched: false,
+        matchedRuleLabel: '',
+        rawActionType: 'ANALYSIS',
+        analysisSource,
+        panelAnalyses: individualNames,
+      });
+    }
+  } else {
+    // No panel: one row per individual analysis
+    for (const analysis of analyses) {
+      const typeName = analysis.analysisType?.name || '';
 
-    // Per-lot: use the individual analysis's lot code and derive owner from it
-    const lotCode = analysis.lot?.lotCode || '';
-    const ownerCode = lotCode.length >= 3 ? lotCode.substring(0, 3).toUpperCase() : fallbackOwnerCode;
+      // Skip brix and temperature analyses
+      if (/^(brix|temp(?:erature)?)$/i.test(typeName)) {
+        continue;
+      }
 
-    rows.push({
-      actionType: 'ANALYSIS',
-      actionId: String(action._id),
-      lotCodes: lotCode,
-      performer: action.performedBy?.name || '',
-      date,
-      ownerCode,
-      analysisOrNotes: typeName,
-      hours: 0,
-      rate: 0,
-      setupFee: 0,
-      total: 0,
-      matched: false,
-      matchedRuleLabel: '',
-      rawActionType: 'ANALYSIS',
-      analysisSource,
-    });
+      const lotCode = analysis.lot?.lotCode || '';
+
+      rows.push({
+        actionType: 'ANALYSIS',
+        actionId: String(action._id),
+        lotCodes: lotCode,
+        performer: action.performedBy?.name || '',
+        date,
+        ownerCode,
+        analysisOrNotes: typeName,
+        hours: 0,
+        rate: 0,
+        setupFee: 0,
+        total: 0,
+        matched: false,
+        matchedRuleLabel: '',
+        rawActionType: 'ANALYSIS',
+        analysisSource,
+      });
+    }
   }
 
   return rows;

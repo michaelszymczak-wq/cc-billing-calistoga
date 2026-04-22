@@ -24,7 +24,8 @@ router.get('/', async (_req: Request, res: Response) => {
     fruitIntakeSettings: settings.fruitIntakeSettings,
     billableAddOns: settings.billableAddOns,
     activeCustomerStorageMonths: settings.activeCustomerStorageMonths,
-    extendedTankTimeRate: settings.extendedTankTimeRate,
+    extendedTankTimeRatePerTon: settings.extendedTankTimeRatePerTon,
+    extendedTankTimeRatePerGal: settings.extendedTankTimeRatePerGal,
     extendedTankTimeGraceDays: settings.extendedTankTimeGraceDays,
   });
 });
@@ -52,7 +53,8 @@ router.post('/', async (req: Request, res: Response) => {
     billableAddOns: (body as Record<string, unknown>).billableAddOns !== undefined ? (body as Record<string, unknown>).billableAddOns as BillableAddOn[] : current.billableAddOns,
     consumables: current.consumables,
     activeCustomerStorageMonths: (body as Record<string, unknown>).activeCustomerStorageMonths !== undefined ? (body as Record<string, unknown>).activeCustomerStorageMonths as number[] : current.activeCustomerStorageMonths,
-    extendedTankTimeRate: (body as Record<string, unknown>).extendedTankTimeRate !== undefined ? (body as Record<string, unknown>).extendedTankTimeRate as number : current.extendedTankTimeRate,
+    extendedTankTimeRatePerTon: (body as Record<string, unknown>).extendedTankTimeRatePerTon !== undefined ? (body as Record<string, unknown>).extendedTankTimeRatePerTon as number : current.extendedTankTimeRatePerTon,
+    extendedTankTimeRatePerGal: (body as Record<string, unknown>).extendedTankTimeRatePerGal !== undefined ? (body as Record<string, unknown>).extendedTankTimeRatePerGal as number : current.extendedTankTimeRatePerGal,
     extendedTankTimeGraceDays: (body as Record<string, unknown>).extendedTankTimeGraceDays !== undefined ? (body as Record<string, unknown>).extendedTankTimeGraceDays as number : current.extendedTankTimeGraceDays,
   };
 

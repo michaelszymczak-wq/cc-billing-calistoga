@@ -466,10 +466,11 @@ export function buildPreview(
       const ownerTankTime = extendedTankTimeRows.filter(ett => ett.ownerCode === ownerCode);
       for (const ett of ownerTankTime) {
         const mapped = mapToQuickBooksItem('EXTENDED_TANK_TIME', '');
+        const qtyLabel = ett.quantity !== undefined ? ` ${ett.quantity} ${ett.unit || 'unit'}` : '';
         const lineItem = makeLineItem(
           customerJob, billingDate, mapped.item,
-          `${mapped.description}: ${ett.lotCode} (${ett.billableDays} days)`,
-          ett.billableDays, ett.dailyRate
+          `${mapped.description}: ${ett.lotCode} (${ett.billableDays} days x${qtyLabel})`,
+          1, ett.totalCharge
         );
         lineItem.amount = round2(ett.totalCharge);
         sources.extendedTankTime.items.push(lineItem);

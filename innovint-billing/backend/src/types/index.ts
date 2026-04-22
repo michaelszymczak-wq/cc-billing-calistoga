@@ -214,6 +214,7 @@ export interface ActionRow {
   additiveQuantity?: number;
   analysisSource?: string;
   firstVesselId?: number;
+  panelAnalyses?: string[];
 }
 
 // ─── Audit Row ───
@@ -432,8 +433,10 @@ export interface ExtendedTankTimeRow {
   totalDays: number;
   includedDays: number;     // grace period (default 16)
   billableDays: number;     // max(0, totalDays - includedDays)
-  dailyRate: number;        // $/day (default 150)
-  totalCharge: number;      // billableDays * dailyRate
+  quantity: number;          // tons or gallons
+  unit: string;              // 'ton' or 'gal'
+  dailyRate: number;        // $/unit/day
+  totalCharge: number;      // billableDays * dailyRate * quantity
 }
 
 export interface ExtendedTankTimeWarning {
@@ -503,8 +506,9 @@ export interface AppSettings {
   billableAddOns: BillableAddOn[];
   consumables: Consumable[];
   activeCustomerStorageMonths: number[];
-  extendedTankTimeRate: number;       // $/day (default 150)
-  extendedTankTimeGraceDays: number;  // included days (default 16)
+  extendedTankTimeRatePerTon: number;  // $/ton/day (default 150)
+  extendedTankTimeRatePerGal: number;  // $/gal/day (default 1)
+  extendedTankTimeGraceDays: number;   // included days (default 16)
 }
 
 // ─── SSE Progress ───

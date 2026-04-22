@@ -226,7 +226,8 @@ export interface AppConfig {
   fruitIntakeSettings: FruitIntakeSettings;
   billableAddOns: BillableAddOn[];
   activeCustomerStorageMonths: number[];
-  extendedTankTimeRate: number;
+  extendedTankTimeRatePerTon: number;
+  extendedTankTimeRatePerGal: number;
   extendedTankTimeGraceDays: number;
 }
 
@@ -295,6 +296,8 @@ export interface ExtendedTankTimeRow {
   totalDays: number;
   includedDays: number;
   billableDays: number;
+  quantity: number;
+  unit: string;
   dailyRate: number;
   totalCharge: number;
 }
@@ -358,7 +361,8 @@ export async function saveSettings(data: {
   tankStorageRate?: number;
   caseGoodsStorageRate?: number;
   activeCustomerStorageMonths?: number[];
-  extendedTankTimeRate?: number;
+  extendedTankTimeRatePerTon?: number;
+  extendedTankTimeRatePerGal?: number;
   extendedTankTimeGraceDays?: number;
 }): Promise<{ success: boolean }> {
   const res = await apiFetch(`${BASE_URL}/settings`, {
@@ -489,6 +493,21 @@ export async function rectifyAction(
     body: JSON.stringify({ sessionId, auditIndex, actionRow }),
   });
   if (!res.ok) throw new Error('Failed to persist rectification');
+}
+
+export async function updateTankTimeRow(
+  sessionId: string,
+  rowIndex: number,
+  dailyRate: number,
+  quantity: number
+): Promise<{ success: boolean; row: ExtendedTankTimeRow }> {
+  const res = await apiFetch(`${BASE_URL}/update-tank-time-row`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, rowIndex, dailyRate, quantity }),
+  });
+  if (!res.ok) throw new Error('Failed to update tank time row');
+  return res.json();
 }
 
 export async function saveBarrelSnapshots(snapshots: BarrelSnapshots): Promise<{ success: boolean }> {
