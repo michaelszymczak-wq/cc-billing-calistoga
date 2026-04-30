@@ -61,7 +61,7 @@ async function buildFromBody(body: RequestBody) {
 
   const qbCustomerMap: Record<string, string> = {};
   for (const c of settings.customers) {
-    if (c.code && c.displayName) qbCustomerMap[c.code] = c.displayName;
+    if (c.code && (c.qbName || c.displayName)) qbCustomerMap[c.code] = c.qbName || c.displayName;
   }
 
   return buildPreview(

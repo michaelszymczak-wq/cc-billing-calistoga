@@ -8,13 +8,19 @@ interface CustomersPageProps {
 }
 
 function emptyRecord(): CustomerRecord {
-  return { ownerName: '', code: '', displayName: '', address: '', phone: '', email: '', isActive: true };
+  return { ownerName: '', code: '', displayName: '', qbName: '', address: '', phone: '', email: '', isActive: true };
+}
+
+function escapeCSV(val: string): string {
+  if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+    return `"${val.replace(/"/g, '""')}"`;
+  }
+  return val;
 }
 
 export default function CustomersPage({ customers, onCustomersChange, unmappedOwners = [] }: CustomersPageProps) {
   const [rows, setRows] = useState<CustomerRecord[]>(() => {
     const list = [...customers];
-    // Add unmapped owners not already present
     for (const owner of unmappedOwners) {
       if (!list.some(c => c.ownerName === owner)) {
         list.push({ ...emptyRecord(), ownerName: owner });
@@ -42,8 +48,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
 
   const handleSave = async () => {
     setStatus('saving');
-    // Filter out completely empty rows
-    const toSave = rows.filter(r => r.ownerName.trim() || r.code.trim() || r.displayName.trim());
+    const toSave = rows.filter(r => r.ownerName.trim() || r.code.trim() || r.qbName?.trim());
     try {
       await saveCustomers(toSave);
       setStatus('success');
@@ -55,6 +60,21 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
     }
   };
 
+  const handleDownloadCSV = () => {
+    const header = 'Owner Name,QB Name,Code,Address,Phone,Email';
+    const csvRows = rows
+      .filter(r => r.ownerName.trim() || r.code.trim() || r.qbName?.trim())
+      .map(r => [r.ownerName, r.qbName || '', r.code, r.address, r.phone, r.email].map(escapeCSV).join(','));
+    const csv = [header, ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'customers.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -63,14 +83,17 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
       const text = ev.target?.result as string;
       if (!text) return;
       const lines = text.split(/\r?\n/).filter(l => l.trim());
+      // Skip header row if present
+      const dataLines = lines[0]?.toLowerCase().startsWith('owner') ? lines.slice(1) : lines;
       const imported: CustomerRecord[] = [];
-      for (const line of lines) {
+      for (const line of dataLines) {
         const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
         if (parts.length >= 2) {
           imported.push({
             ownerName: parts[0] || '',
-            code: parts[1] || '',
-            displayName: parts[2] || '',
+            qbName: parts[1] || '',
+            code: parts[2] || '',
+            displayName: '',
             address: parts[3] || '',
             phone: parts[4] || '',
             email: parts[5] || '',
@@ -79,7 +102,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
         }
       }
       if (imported.length === 0) return;
-      setRows(prev => [...prev, ...imported]);
+      setRows(imported);
       setDirty(true);
     };
     reader.readAsText(file);
@@ -91,7 +114,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
   return (
     <div>
       <h2 className="text-2xl font-bold mb-1">Customers</h2>
-      <p className="text-sm text-gray-500 mb-6">Manage customer mappings, display names, and contact info for invoices</p>
+      <p className="text-sm text-gray-500 mb-6">Manage customer mappings and contact info for invoices and QB exports</p>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
@@ -99,8 +122,8 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
             <tr className="bg-gray-50 border-b">
               <th className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap w-16">Active?</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Owner Name</th>
+              <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">QB Name</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Code</th>
-              <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Display Name</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Address</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Phone</th>
               <th className="text-left px-2 py-2 font-medium text-gray-600 whitespace-nowrap">Email</th>
@@ -132,19 +155,19 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
                   <td className="px-1 py-1">
                     <input
                       type="text"
-                      value={row.code}
-                      onChange={e => updateRow(idx, 'code', e.target.value.toUpperCase())}
-                      placeholder="ABC"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+                      value={row.qbName || ''}
+                      onChange={e => updateRow(idx, 'qbName', e.target.value)}
+                      placeholder="QuickBooks customer name"
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                     />
                   </td>
                   <td className="px-1 py-1">
                     <input
                       type="text"
-                      value={row.displayName}
-                      onChange={e => updateRow(idx, 'displayName', e.target.value)}
-                      placeholder="Invoice name"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                      value={row.code}
+                      onChange={e => updateRow(idx, 'code', e.target.value.toUpperCase())}
+                      placeholder="ABC"
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm font-mono"
                     />
                   </td>
                   <td className="px-1 py-1">
@@ -202,6 +225,12 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
           <input type="file" accept=".csv,.txt" onChange={handleImportCSV} className="hidden" />
         </label>
         <button
+          onClick={handleDownloadCSV}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+        >
+          Download CSV
+        </button>
+        <button
           onClick={handleSave}
           disabled={status === 'saving'}
           className="px-4 py-1.5 bg-violet-600 text-white rounded-md text-sm hover:bg-violet-700 disabled:opacity-50"
@@ -212,7 +241,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
         {status === 'error' && <span className="text-sm text-red-600">Failed to save.</span>}
       </div>
 
-      <p className="text-xs text-gray-400 mt-2">CSV format: Owner Name, Code, Display Name, Address, Phone, Email</p>
+      <p className="text-xs text-gray-400 mt-2">CSV format: Owner Name, QB Name, Code, Address, Phone, Email</p>
     </div>
   );
 }

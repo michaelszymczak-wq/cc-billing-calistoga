@@ -480,6 +480,7 @@ export interface CustomerRecord {
   ownerName: string;   // InnoVint API owner name (was customerMap key)
   code: string;        // billing code (was customerMap value / qbCustomerMap key)
   displayName: string; // invoice display name (was qbCustomerMap value)
+  qbName?: string;     // QuickBooks customer name (if different from displayName)
   address: string;
   phone: string;
   email: string;

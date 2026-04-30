@@ -164,6 +164,7 @@ export interface CustomerRecord {
   ownerName: string;
   code: string;
   displayName: string;
+  qbName?: string;
   address: string;
   phone: string;
   email: string;
