@@ -158,7 +158,7 @@ function makeLineItem(
 ): QBLineItem {
   const amount = round2(quantity * rate);
   return {
-    arAccount: '4010 \u00b7 Sales',
+    arAccount: '1100 \u00b7 Accounts Receivable',
     customerJob,
     date,
     salesTax: 'no tax',

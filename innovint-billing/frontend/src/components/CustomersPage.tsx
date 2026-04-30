@@ -18,6 +18,41 @@ function escapeCSV(val: string): string {
   return val;
 }
 
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let i = 0;
+  while (i <= line.length) {
+    if (line[i] === '"') {
+      // Quoted field
+      let field = '';
+      i++; // skip opening quote
+      while (i < line.length) {
+        if (line[i] === '"' && line[i + 1] === '"') {
+          field += '"';
+          i += 2;
+        } else if (line[i] === '"') {
+          i++; // skip closing quote
+          break;
+        } else {
+          field += line[i++];
+        }
+      }
+      fields.push(field);
+      if (line[i] === ',') i++; // skip comma after field
+    } else {
+      // Unquoted field
+      const end = line.indexOf(',', i);
+      if (end === -1) {
+        fields.push(line.slice(i).trim());
+        break;
+      }
+      fields.push(line.slice(i, end).trim());
+      i = end + 1;
+    }
+  }
+  return fields;
+}
+
 export default function CustomersPage({ customers, onCustomersChange, unmappedOwners = [] }: CustomersPageProps) {
   const [rows, setRows] = useState<CustomerRecord[]>(() => {
     const list = [...customers];
@@ -87,7 +122,7 @@ export default function CustomersPage({ customers, onCustomersChange, unmappedOw
       const dataLines = lines[0]?.toLowerCase().startsWith('owner') ? lines.slice(1) : lines;
       const imported: CustomerRecord[] = [];
       for (const line of dataLines) {
-        const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+        const parts = parseCSVLine(line);
         if (parts.length >= 2) {
           imported.push({
             ownerName: parts[0] || '',
