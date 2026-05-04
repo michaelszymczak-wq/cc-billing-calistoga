@@ -656,11 +656,19 @@ function processGenericAction(action: ActionApiItem): ActionRow[] {
   // Use complianceContext as actionType when present (e.g. BOND_TO_BOND_TRANSFER_OUT/IN)
   const effectiveActionType = action.actionData?.complianceContext || action.actionType;
 
-  // Extract volume for bond-to-bond transfers
+  // Extract volume or hours for bond-to-bond transfers
   let quantity: number | undefined;
   let unit: string | undefined;
+  let hours = 0;
   const ctx = (action.actionData?.complianceContext || '').toUpperCase();
-  if (ctx === 'BOND_TO_BOND_TRANSFER_OUT') {
+  const isBondTransfer = ctx === 'BOND_TO_BOND_TRANSFER_OUT' || ctx === 'BOND_TO_BOND_TRANSFER_IN';
+
+  if (isBondTransfer && !/not\s+billable/i.test(notesText) && /billable/i.test(notesText)) {
+    // Billable bond transfer: extract hours and use the per-hour rate for this action type
+    hours = extractHoursFromNotes(notesText);
+    quantity = hours;
+    unit = 'hours';
+  } else if (ctx === 'BOND_TO_BOND_TRANSFER_OUT') {
     quantity = extractBondTransferVolume(action, 'OUT');
     unit = 'gal';
   } else if (ctx === 'BOND_TO_BOND_TRANSFER_IN') {
@@ -676,7 +684,7 @@ function processGenericAction(action: ActionApiItem): ActionRow[] {
     date,
     ownerCode,
     analysisOrNotes: notesText || getActionName(action) || '',
-    hours: 0,
+    hours,
     rate: 0,
     setupFee: 0,
     total: 0,
@@ -789,7 +797,7 @@ function processRackAction(action: ActionApiItem): ActionRow[] {
     return [];
   }
 
-  const hours = extractBillableHours(notesText);
+  const hours = extractHoursFromNotes(notesText);
 
   return [{
     actionType: action.actionType,

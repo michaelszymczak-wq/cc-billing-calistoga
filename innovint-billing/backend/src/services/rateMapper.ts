@@ -287,9 +287,18 @@ function findRate(
   }
 
   // 2. BILLABLE keyword: fires when action name or notes contain "Billable" (but not "Not Billable",
-  // which is already excluded upstream). Prefers a rule with variation='Billable', then falls back
-  // to the first enabled rule whose label is "Labor-Regular".
+  // which is already excluded upstream). For non-CUSTOM action types (e.g. RACK, BOND_TO_BOND_TRANSFER_IN)
+  // the action-specific rate rule is tried first so hours are billed at the correct per-action rate.
+  // For CUSTOM and any type with no specific rule, falls back to variation='Billable' then 'Labor-Regular'.
   if (/billable/i.test(combinedText)) {
+    if (cleanActionType !== 'CUSTOM') {
+      for (const rule of rules) {
+        if (!rule.enabled) continue;
+        if (cleanKey(rule.actionType) !== cleanActionType) continue;
+        const eQty = effectiveQtyForUnit(rule.billingUnit, qty, hours, vesselCount);
+        return matchedResult(rule, eQty * rule.rate + rule.setupFee);
+      }
+    }
     for (const rule of rules) {
       if (!rule.enabled) continue;
       if (cleanKey(rule.variation) === 'BILLABLE') {
