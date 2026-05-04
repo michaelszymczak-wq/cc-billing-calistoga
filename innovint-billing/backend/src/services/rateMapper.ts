@@ -286,11 +286,20 @@ function findRate(
     return unmatchedResult(`No rate rule for analysis type: ${variation}${analysisSource ? ` (${analysisSource})` : ''}`);
   }
 
-  // 2. BILLABLE keyword
+  // 2. BILLABLE keyword: fires when action name or notes contain "Billable" (but not "Not Billable",
+  // which is already excluded upstream). Prefers a rule with variation='Billable', then falls back
+  // to the first enabled rule whose label is "Labor-Regular".
   if (/billable/i.test(combinedText)) {
     for (const rule of rules) {
       if (!rule.enabled) continue;
       if (cleanKey(rule.variation) === 'BILLABLE') {
+        const eQty = effectiveQtyForUnit(rule.billingUnit, qty, hours, vesselCount);
+        return matchedResult(rule, eQty * rule.rate + rule.setupFee);
+      }
+    }
+    for (const rule of rules) {
+      if (!rule.enabled) continue;
+      if (cleanKey(rule.label) === 'LABORREGULAR') {
         const eQty = effectiveQtyForUnit(rule.billingUnit, qty, hours, vesselCount);
         return matchedResult(rule, eQty * rule.rate + rule.setupFee);
       }
@@ -397,13 +406,22 @@ export function applyRateMapping(
   const originalQuantities: number[] = []; // preserve real volume before flat-fee override
 
   const updatedRows = expandedRows.map((row, idx) => {
+    // For billable CUSTOM actions, processCustomAction already extracted hours and set unit='hours',
+    // but stripped "Billable" from analysisOrNotes (uses the action name for display). Inject it
+    // back here so the BILLABLE keyword block in findRate fires even when the word only appeared
+    // in the notes, not in the InnoVint action name.
+    const notesContext =
+      row.rawActionType === 'CUSTOM' && row.unit === 'hours'
+        ? `Billable ${row.analysisOrNotes}`
+        : row.analysisOrNotes;
+
     const result = findRate(
       rules,
       row.actionType,
       row.analysisOrNotes,
       row.quantity || 0,
-      row.analysisOrNotes,
-      row.analysisOrNotes,
+      notesContext,
+      notesContext,
       row.hours,
       row.vesselCount,
       row.bottlesPerCase,
@@ -471,6 +489,8 @@ export function applyRateMapping(
         ownerCode: row.ownerCode,
         analysisOrNotes: row.analysisOrNotes,
         reason: 'Unknown owner (UNK)',
+        suggestedRuleId: result.matchedRule?.id,
+        suggestedQuantity: displayQty,
       });
     }
 

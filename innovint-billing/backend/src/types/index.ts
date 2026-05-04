@@ -228,6 +228,9 @@ export interface AuditRow {
   ownerCode: string;
   analysisOrNotes: string;
   reason: string;
+  // For UNK-owner rows that already matched a rule, pre-fill the Audit form
+  suggestedRuleId?: string;
+  suggestedQuantity?: number;
 }
 
 // ─── Bulk Inventory ───

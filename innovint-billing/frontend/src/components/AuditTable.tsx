@@ -24,7 +24,12 @@ export default function AuditTable({ rows, rateRules, allOwnerCodes, onRectify }
   );
 
   function getEdit(idx: number, row: AuditRow): RowEdit {
-    return edits[idx] || { ownerCode: row.ownerCode, ruleId: '', quantityOverride: '1', totalOverride: '' };
+    return edits[idx] || {
+      ownerCode: row.ownerCode,
+      ruleId: row.suggestedRuleId || '',
+      quantityOverride: row.suggestedQuantity != null ? String(row.suggestedQuantity) : '1',
+      totalOverride: '',
+    };
   }
 
   function updateEdit(idx: number, row: AuditRow, partial: Partial<RowEdit>) {

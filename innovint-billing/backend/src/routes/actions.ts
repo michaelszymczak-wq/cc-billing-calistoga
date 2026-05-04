@@ -136,9 +136,14 @@ router.post('/rectify', async (req: Request, res: Response) => {
 
   const br = session.billingResult;
 
-  // Replace the original unmatched row in actions (same actionId), or append
+  // Replace the original row in actions: match by actionId + analysisOrNotes to handle
+  // multi-row actions (e.g. expanded panel analyses sharing the same actionId).
+  // Also allow replacing UNK-owner rows that are matched but have an unknown owner.
   const existingIdx = br.actions.findIndex(
-    (r) => r.actionId === actionRow.actionId && !r.matched
+    (r) =>
+      r.actionId === actionRow.actionId &&
+      r.analysisOrNotes === actionRow.analysisOrNotes &&
+      (!r.matched || r.ownerCode === 'UNK')
   );
   if (existingIdx >= 0) {
     br.actions[existingIdx] = actionRow;

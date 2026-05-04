@@ -465,11 +465,17 @@ function processCustomAction(action: ActionApiItem): ActionRow[] {
   // Count vessels if present (e.g. barrel shipping actions)
   const vessels = action.actionData?.vessels || [];
 
-  // When actionData.name contains "Billable", parse hours from notes text first
-  // and use actionName alone for matching (notes are just hour metadata)
+  // Skip if notes say "Not Billable"
+  if (/not\s+billable/i.test(notesText)) {
+    return [];
+  }
+
+  // When name or notes contain "Billable", parse hours from notes and use
+  // actionName alone for matching (notes are just hour metadata)
   let hours: number;
   let displayName: string;
-  if (/billable/i.test(actionName) && notesText) {
+  const isBillable = /billable/i.test(actionName) || /billable/i.test(notesText);
+  if (isBillable && notesText) {
     hours = extractHoursFromNotes(notesText);
     displayName = actionName.trim();
   } else {
@@ -497,7 +503,8 @@ function processCustomAction(action: ActionApiItem): ActionRow[] {
     matchedRuleLabel: '',
     rawActionType: 'CUSTOM',
     vesselCount: vesselCount || undefined,
-    quantity: vesselCount || undefined,
+    quantity: isBillable ? hours : (vesselCount || undefined),
+    unit: isBillable ? 'hours' : undefined,
     firstVesselId,
   }];
 }
