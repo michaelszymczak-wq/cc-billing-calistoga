@@ -41,6 +41,7 @@ export function defaultSettings(): AppSettings {
     extendedTankTimeRatePerTon: 150,
     extendedTankTimeRatePerGal: 1,
     extendedTankTimeGraceDays: 16,
+    lastUsedInvoiceNumber: 9000,
     fruitIntakeSettings: {
       actionTypeKey: 'FRUITINTAKE',
       vintageLookback: 3,
@@ -134,6 +135,7 @@ function mergeWithDefaults(parsed: Record<string, unknown>): AppSettings {
     extendedTankTimeRatePerTon: (parsed.extendedTankTimeRatePerTon as number) ?? (parsed.extendedTankTimeRate as number) ?? defaults.extendedTankTimeRatePerTon,
     extendedTankTimeRatePerGal: (parsed.extendedTankTimeRatePerGal as number) ?? defaults.extendedTankTimeRatePerGal,
     extendedTankTimeGraceDays: (parsed.extendedTankTimeGraceDays as number) ?? defaults.extendedTankTimeGraceDays,
+    lastUsedInvoiceNumber: (parsed.lastUsedInvoiceNumber as number) ?? defaults.lastUsedInvoiceNumber,
   };
 }
 

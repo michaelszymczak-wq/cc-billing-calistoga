@@ -27,6 +27,7 @@ router.get('/', async (_req: Request, res: Response) => {
     extendedTankTimeRatePerTon: settings.extendedTankTimeRatePerTon,
     extendedTankTimeRatePerGal: settings.extendedTankTimeRatePerGal,
     extendedTankTimeGraceDays: settings.extendedTankTimeGraceDays,
+    lastUsedInvoiceNumber: settings.lastUsedInvoiceNumber,
   });
 });
 
@@ -56,6 +57,7 @@ router.post('/', async (req: Request, res: Response) => {
     extendedTankTimeRatePerTon: (body as Record<string, unknown>).extendedTankTimeRatePerTon !== undefined ? (body as Record<string, unknown>).extendedTankTimeRatePerTon as number : current.extendedTankTimeRatePerTon,
     extendedTankTimeRatePerGal: (body as Record<string, unknown>).extendedTankTimeRatePerGal !== undefined ? (body as Record<string, unknown>).extendedTankTimeRatePerGal as number : current.extendedTankTimeRatePerGal,
     extendedTankTimeGraceDays: (body as Record<string, unknown>).extendedTankTimeGraceDays !== undefined ? (body as Record<string, unknown>).extendedTankTimeGraceDays as number : current.extendedTankTimeGraceDays,
+    lastUsedInvoiceNumber: (body as Record<string, unknown>).lastUsedInvoiceNumber !== undefined ? (body as Record<string, unknown>).lastUsedInvoiceNumber as number : current.lastUsedInvoiceNumber,
   };
 
   await saveSettings(updated);
@@ -81,12 +83,13 @@ router.put('/rate-rules', async (req: Request, res: Response) => {
   res.json({ success: true, count: rules.length });
 });
 
-// PUT /api/settings/billing-prefs — save month/year preferences
+// PUT /api/settings/billing-prefs — save month/year/invoice preferences
 router.put('/billing-prefs', async (req: Request, res: Response) => {
-  const { lastUsedMonth, lastUsedYear } = req.body as { lastUsedMonth?: string; lastUsedYear?: number };
+  const { lastUsedMonth, lastUsedYear, lastUsedInvoiceNumber } = req.body as { lastUsedMonth?: string; lastUsedYear?: number; lastUsedInvoiceNumber?: number };
   const current = await loadSettings();
   if (lastUsedMonth !== undefined) current.lastUsedMonth = lastUsedMonth;
   if (lastUsedYear !== undefined) current.lastUsedYear = lastUsedYear;
+  if (lastUsedInvoiceNumber !== undefined) current.lastUsedInvoiceNumber = lastUsedInvoiceNumber;
   await saveSettings(current);
   res.json({ success: true });
 });

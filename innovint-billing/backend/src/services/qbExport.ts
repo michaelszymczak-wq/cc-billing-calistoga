@@ -514,6 +514,100 @@ function escapeCSV(value: string | number): string {
   return str;
 }
 
+// ─── IIF Generation (QuickBooks Desktop import format) ───
+
+function stripIIF(s: string | number): string {
+  return String(s ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+}
+
+function addDays(dateStr: string, days: number): string {
+  const [mm, dd, yyyy] = dateStr.split('/').map(Number);
+  const d = new Date(yyyy, mm - 1, dd);
+  d.setDate(d.getDate() + days);
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+export function generateIIF(preview: QBPreviewResponse, startingNumber: number): string {
+  const T = '\t';
+  const lines: string[] = [];
+
+  // Three header rows
+  lines.push(['!TRNS', 'TRNSID', 'TRNSTYPE', 'DATE', 'ACCNT', 'NAME', 'CLASS', 'AMOUNT', 'DOCNUM', 'MEMO', 'CLEAR', 'TOPRINT', 'ADDR5', 'DUEDATE', 'TERMS'].join(T));
+  lines.push(['!SPL', 'SPLID', 'TRNSTYPE', 'DATE', 'ACCNT', 'NAME', 'CLASS', 'AMOUNT', 'DOCNUM', 'MEMO', 'CLEAR', 'QNTY', 'PRICE', 'INVITEM', 'TAXABLE'].join(T));
+  lines.push('!ENDTRNS');
+
+  const billingDate = preview.billingDate;
+  const dueDate = addDays(billingDate, 30);
+
+  let docNum = startingNumber;
+
+  for (const customer of preview.customers) {
+    if (customer.total <= 0) continue;
+
+    const allItems: QBLineItem[] = [
+      ...customer.sources.actions.items,
+      ...customer.sources.barrel.items,
+      ...customer.sources.bulk.items,
+      ...customer.sources.fruitIntake.items,
+      ...customer.sources.addOns.items,
+      ...customer.sources.consumables.items,
+      ...customer.sources.caseGoods.items,
+      ...customer.sources.extendedTankTime.items,
+    ].filter(item => item.amount !== 0);
+
+    if (allItems.length === 0) continue;
+
+    const customerName = stripIIF(allItems[0].customerJob);
+    // Compute TRNS amount as exact sum of SPL items to guarantee balance = 0
+    const trnsAmount = round2(allItems.reduce((s, i) => s + i.amount, 0));
+
+    lines.push([
+      'TRNS',
+      '',
+      'INVOICE',
+      billingDate,
+      '1100 \u00b7 Accounts Receivable',
+      customerName,
+      '',
+      trnsAmount.toFixed(2),
+      String(docNum),
+      '',
+      'N',
+      'Y',
+      '',
+      dueDate,
+      'Net 30',
+    ].join(T));
+
+    for (const item of allItems) {
+      lines.push([
+        'SPL',
+        '',
+        'INVOICE',
+        billingDate,
+        '',
+        '',
+        '',
+        (-item.amount).toFixed(2),
+        String(docNum),
+        stripIIF(item.description),
+        'N',
+        '1',
+        item.amount.toFixed(2),
+        stripIIF(item.item),
+        'N',
+      ].join(T));
+    }
+
+    lines.push('ENDTRNS');
+    docNum++;
+  }
+
+  return lines.join('\r\n') + '\r\n';
+}
+
+// ─── CSV Generation (RFC 4180) ───
+
 export function generateCSV(preview: QBPreviewResponse): string {
   const headers = [
     'AR Account', 'Customer:Job', 'Date', 'Sales Tax', 'Number',

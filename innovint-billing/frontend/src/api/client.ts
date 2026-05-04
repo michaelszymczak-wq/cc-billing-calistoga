@@ -230,6 +230,7 @@ export interface AppConfig {
   extendedTankTimeRatePerTon: number;
   extendedTankTimeRatePerGal: number;
   extendedTankTimeGraceDays: number;
+  lastUsedInvoiceNumber: number;
 }
 
 export interface ActionRow {
@@ -388,7 +389,7 @@ export async function saveRateRules(rules: RateRule[]): Promise<{ success: boole
   return res.json();
 }
 
-export async function saveBillingPrefs(prefs: { lastUsedMonth?: string; lastUsedYear?: number }): Promise<void> {
+export async function saveBillingPrefs(prefs: { lastUsedMonth?: string; lastUsedYear?: number; lastUsedInvoiceNumber?: number }): Promise<void> {
   await apiFetch(`${BASE_URL}/settings/billing-prefs`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -717,6 +718,31 @@ export async function downloadQBCSV(params: {
   const disposition = res.headers.get('Content-Disposition') || '';
   const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
   const filename = filenameMatch ? filenameMatch[1] : 'QB-Export.csv';
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
+export async function downloadQBIIF(params: {
+  sessionId: string;
+  month: string;
+  year: number;
+  excludedCustomers?: string[];
+  includeDeposits?: boolean;
+  enabledSources?: EnabledSources;
+  startingInvoiceNumber: number;
+}): Promise<{ blob: Blob; filename: string }> {
+  const res = await apiFetch(`${BASE_URL}/export/invoices/download-iif`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to download IIF');
+  }
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+  const filename = filenameMatch ? filenameMatch[1] : 'cc-billing.iif';
   const blob = await res.blob();
   return { blob, filename };
 }

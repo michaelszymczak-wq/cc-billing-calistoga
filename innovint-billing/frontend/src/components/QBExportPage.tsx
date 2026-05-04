@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   AppConfig, QBPreviewResponse, QBCustomerSummary, EnabledSources,
-  getQBPreview, downloadQBCSV,
+  getQBPreview, downloadQBCSV, downloadQBIIF, saveBillingPrefs,
 } from '../api/client';
 import { BillingRunState } from './BillingControls';
 
@@ -39,10 +39,12 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
     actions: true, barrel: true, bulk: true, fruitIntake: true,
     addOns: true, consumables: true, caseGoods: true, extendedTankTime: true,
   });
+  const [startingInvoiceNumber, setStartingInvoiceNumber] = useState(config.lastUsedInvoiceNumber ?? 9000);
   const [preview, setPreview] = useState<QBPreviewResponse | null>(null);
   const [expandedOwner, setExpandedOwner] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingIIF, setDownloadingIIF] = useState(false);
   const [error, setError] = useState('');
 
   const hasSession = !!(billingState?.sessionId && billingState.results);
@@ -121,6 +123,42 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
       setError(err instanceof Error ? err.message : 'Download failed');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleDownloadIIF = async () => {
+    if (!canGenerate) return;
+    setDownloadingIIF(true);
+    try {
+      const { blob, filename } = await downloadQBIIF({
+        sessionId: billingState?.sessionId || '',
+        month,
+        year,
+        excludedCustomers: getExcludedList(),
+        includeDeposits,
+        enabledSources,
+        startingInvoiceNumber,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Advance the starting number by the count of billed customers
+      if (preview) {
+        const count = preview.customers.filter(c => c.total > 0).length;
+        const nextNumber = startingInvoiceNumber + count;
+        setStartingInvoiceNumber(nextNumber);
+        saveBillingPrefs({ lastUsedInvoiceNumber: nextNumber }).catch(() => {});
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'IIF download failed');
+    } finally {
+      setDownloadingIIF(false);
     }
   };
 
@@ -292,8 +330,8 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
             </div>
           </div>
 
-          {/* Download button */}
-          <div className="flex gap-3 mb-4">
+          {/* Download buttons */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <button
               onClick={handleDownload}
               disabled={downloading}
@@ -301,6 +339,23 @@ export default function QBExportPage({ config, billingState }: QBExportPageProps
             >
               {downloading ? 'Downloading...' : 'Download CSV'}
             </button>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600 whitespace-nowrap">Starting Invoice #:</label>
+              <input
+                type="number"
+                value={startingInvoiceNumber}
+                onChange={e => setStartingInvoiceNumber(parseInt(e.target.value) || startingInvoiceNumber)}
+                min="1"
+                className="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm"
+              />
+              <button
+                onClick={handleDownloadIIF}
+                disabled={downloadingIIF}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {downloadingIIF ? 'Downloading...' : 'Download IIF'}
+              </button>
+            </div>
           </div>
 
           {/* Desktop table */}

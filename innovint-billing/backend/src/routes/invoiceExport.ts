@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { sessions } from './actions';
 import { loadSettings, loadSessionResult } from '../persistence';
-import { buildPreview, generateCSV, getShortMonthYear } from '../services/qbExport';
+import { buildPreview, generateCSV, generateIIF, getShortMonthYear } from '../services/qbExport';
 
 const router = Router();
 
@@ -23,12 +23,15 @@ const defaultEnabledSources = { actions: true, barrel: true, bulk: true, fruitIn
 // Sources that require a billing session (come from the billing run)
 const SESSION_SOURCES: (keyof typeof defaultEnabledSources)[] = ['actions', 'barrel', 'bulk', 'caseGoods', 'extendedTankTime'];
 
+const MONTHS_LIST = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
 interface RequestBody {
   sessionId: string;
   month: string;
   year: number;
   excludedCustomers?: string[];
   includeDeposits?: boolean;
+  startingInvoiceNumber?: number;
   enabledSources?: {
     actions: boolean;
     barrel: boolean;
@@ -120,6 +123,31 @@ router.post('/download', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(csv);
+});
+
+// POST /download-iif — generate and stream QB Desktop IIF
+router.post('/download-iif', async (req: Request, res: Response) => {
+  const body = req.body as RequestBody;
+
+  if (needsSession(body)) {
+    const session = await loadSession(body.sessionId);
+    if (!session?.billingResult) {
+      res.status(404).json({ error: 'No billing results found for this session. Run billing first.' });
+      return;
+    }
+  }
+
+  const preview = await buildFromBody(body);
+  const startingNumber = body.startingInvoiceNumber ?? 9000;
+  const iif = generateIIF(preview, startingNumber);
+
+  const monthIdx = MONTHS_LIST.indexOf(body.month);
+  const mm = monthIdx === -1 ? '01' : String(monthIdx + 1).padStart(2, '0');
+  const filename = `cc-billing-${body.year}-${mm}.iif`;
+
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(iif);
 });
 
 export default router;

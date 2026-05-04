@@ -513,6 +513,7 @@ export interface AppSettings {
   extendedTankTimeRatePerTon: number;  // $/ton/day (default 150)
   extendedTankTimeRatePerGal: number;  // $/gal/day (default 1)
   extendedTankTimeGraceDays: number;   // included days (default 16)
+  lastUsedInvoiceNumber: number;       // starting invoice number for IIF export (default 9000)
 }
 
 // ─── SSE Progress ───
